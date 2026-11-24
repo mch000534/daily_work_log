@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>每日工作紀錄</title>
+<meta name="theme-color" content="#4f46e5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="工作紀錄">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
 <!--
 使用方式：
 1. 用瀏覽器直接開啟此檔案即可（無需伺服器）。
@@ -443,7 +450,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     <h3 style="margin-top:0">Google 試算表同步</h3>
     <label for="sheetUrl">Apps Script 網址</label>
     <input type="text" id="sheetUrl" placeholder="https://script.google.com/macros/s/.../exec">
-    <p class="hint">部署 Apps Script 後貼上「網頁應用程式」網址。設定後離開輸入框會自動同步當天記錄。</p>
+    <label for="sheetToken">同步密碼（建議設定）</label>
+    <input type="password" id="sheetToken" autocomplete="off" placeholder="與 Apps Script 內 TOKEN 相同">
+    <p class="hint">部署 Apps Script 後貼上「網頁應用程式」網址。設定後會自動雙向同步：開啟／切回頁面時拉取，編輯停止後約 2 秒自動上傳。手機與電腦各設定一次即可。</p>
     <button id="openTutorialBtn" class="btn" type="button" style="margin-top:8px;">📘 Google 試算表設定教學</button>
     <hr>
     <button id="clearLocalBtn" class="btn danger" style="width:100%;justify-content:center;">清除所有本地記錄</button>
@@ -472,7 +481,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     <ol class="tut">
       <li>在試算表選單點「<strong>擴充功能 → Apps Script</strong>」。</li>
       <li>刪除編輯器內原有的 <code>function myFunction() {}</code>。</li>
-      <li>按下方按鈕複製程式碼並貼上，按 <code>Ctrl/⌘ + S</code> 儲存。</li>
+      <li>按下方按鈕複製程式碼並貼上。<strong>把第一行 <code>const TOKEN = ''</code> 的引號內改成自己的密碼</strong>（例如 <code>'my-secret-123'</code>），之後在 App「設定 → 同步密碼」填入同一組，按 <code>Ctrl/⌘ + S</code> 儲存。</li>
     </ol>
     <div style="display:flex;gap:8px;margin:8px 0;">
       <button id="copyGasBtn" class="btn primary" type="button">複製程式碼</button>
@@ -494,16 +503,17 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     <h3>步驟 4：貼回本應用程式</h3>
     <ol class="tut">
       <li>關閉本視窗，把網址貼到「Apps Script 網址」欄位，按「儲存」。</li>
-      <li>在編輯區輸入內容後點到別處，會自動同步當天記錄；也可按上方「同步」做雙向同步。</li>
+      <li>輸入內容後約 2 秒自動上傳；開啟或切回頁面時自動拉取；也可按上方「同步」手動雙向同步。</li>
+      <li><strong>手機</strong>：用手機瀏覽器開啟同一個網頁，在設定貼上同樣的網址與密碼即可；iPhone 用 Safari「分享 → 加入主畫面」、Android 用 Chrome「安裝應用程式」，之後像 App 一樣使用。</li>
     </ol>
 
     <h3>常見問題</h3>
     <ul class="tut">
       <li><strong>修改程式碼後沒生效</strong>：每次改程式碼都要「部署 → 管理部署作業 → 編輯 → 版本：新版本 → 部署」，網址不變。</li>
       <li><strong>同步失敗</strong>：確認「誰可以存取」為「所有人」、網址結尾是 <code>/exec</code>（不是 <code>/dev</code>）。</li>
-      <li><strong>同步規則</strong>：每筆記錄都有「更新時間」，同步時以較新的一方為準（本機較新就上傳，試算表較新就下載）。更新應用程式後，請重新複製程式碼貼進 Apps Script 並<strong>重新部署（管理部署作業 → 編輯 → 新版本）</strong>。</li>
+      <li><strong>同步規則</strong>：每筆記錄都有「更新時間」，以較新的一方為準；刪除也會同步。若兩台裝置離線時都改了同一天，會把兩份內容合併並標示「同步衝突」，不會遺失。在試算表手動修改內容時會自動更新時間。更新應用程式後，請重新複製程式碼貼進 Apps Script 並<strong>重新部署（管理部署作業 → 編輯 → 新版本）</strong>。</li>
       <li><strong>同一天只保留一列</strong>：以日期為鍵，重複同步會更新而非新增。</li>
-      <li><strong>隱私</strong>：網址知道的人都能寫入您的試算表，請勿公開分享該網址。</li>
+      <li><strong>隱私</strong>：請務必設定同步密碼，否則知道網址的人都能讀寫您的試算表。網頁本身不含任何個人資料，資料只存在各裝置瀏覽器與您的試算表。</li>
     </ul>
 
     <div class="modal-actions">
@@ -512,107 +522,123 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   </div>
 </div>
 
-<script type="text/plain" id="gasSource">function doPost(e) {
+<script type="text/plain" id="gasSource">// 同步密碼：請改成自己的密碼，並填入 App「設定 → 同步密碼」。留空＝不驗證（不建議）
+const TOKEN = '';
+
+function out(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function getSheet() {
+  return SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+}
+
+// 統一轉成 YYYY-MM-DD
+function toISODate(val) {
+  if (!val) return '';
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  const str = String(val).trim();
+  let m = str.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  m = str.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return '';
+}
+
+function toMillis(v) {
+  if (v instanceof Date) return v.getTime();
+  const n = new Date(v).getTime();
+  return isNaN(n) ? 0 : n;
+}
+
+// 直接在試算表手動編輯「日期／內容／標籤」時，自動更新第 4 欄的更新時間（簡易觸發器，不需另外設定）
+function onEdit(e) {
+  const r = e.range;
+  if (r.getSheet().getIndexInSpreadsheet() !== 1 || r.getRow() < 2 || r.getColumn() > 3) return;
+  const now = new Date();
+  const stamps = [];
+  for (let i = 0; i < r.getNumRows(); i++) stamps.push([now]);
+  r.getSheet().getRange(r.getRow(), 4, r.getNumRows(), 1).setValues(stamps);
+}
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); }
+  catch (err) { return out({ status: 'error', message: '伺服器忙碌，請稍後再試' }); }
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     const data = JSON.parse(e.postData.contents);
+    if (TOKEN && data.token !== TOKEN) return out({ status: 'error', message: '同步密碼錯誤' });
+    const sheet = getSheet();
+    const lastRow = sheet.getLastRow();
+    const rows = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, 4).getValues() : [];
     const action = data.action || 'save';
 
-    // 統一轉成 YYYY-MM-DD
-    function toISODate(val) {
-      if (!val) return '';
-      if (val instanceof Date && !isNaN(val.getTime())) {
-        return Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-      }
-      const str = String(val).trim();
-      // 中文：2026年11月23日星期一
-      let m = str.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-      if (m) {
-        return m[1] + '-' + ('0'+m[2]).slice(-2) + '-' + ('0'+m[3]).slice(-2);
-      }
-      // 標準 ISO
-      m = str.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
-      if (m) {
-        return m[1] + '-' + ('0'+m[2]).slice(-2) + '-' + ('0'+m[3]).slice(-2);
-      }
-      // 其他嘗試
-      const d = new Date(str);
-      if (!isNaN(d.getTime())) {
-        return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-      }
-      return '';
+    if (action === 'load') {
+      const entries = {};
+      rows.forEach(row => {
+        const date = toISODate(row[0]);
+        if (!date) return;
+        const content = (row[1] || '').toString().trim();
+        const tagsStr = (row[2] || '').toString().trim();
+        const ts = toMillis(row[3]);
+        const prev = entries[date];
+        if (prev && prev.updatedAt > ts) return;        // 重複日期取較新者
+        entries[date] = {
+          content: content,
+          tags: tagsStr ? tagsStr.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : [],
+          updatedAt: ts,
+          deleted: !content && !tagsStr                    // 已刪除的記錄也回傳，才能同步刪除
+        };
+      });
+      return out({ status: 'ok', entries: entries, serverTime: Date.now() });
     }
 
-    if (action === 'load') {
-      const lastRow = sheet.getLastRow();
-      const entries = {};
-      if (lastRow >= 2) {
-        const values = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
-        values.forEach(row => {
-          const dateStr = toISODate(row[0]);
-          if (!dateStr) return;
-          const content = (row[1] || '').toString().trim();
-          const tagsStr = (row[2] || '').toString().trim();
-          if (!content && !tagsStr) return;
-          const ts = row[3] instanceof Date ? row[3].getTime() : (Number(new Date(row[3]).getTime()) || 0);
-          entries[dateStr] = {
-            content: content,
-            tags: tagsStr ? tagsStr.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : [],
-            updatedAt: ts
-          };
-        });
-      }
-      return ContentService.createTextOutput(JSON.stringify({ status: 'ok', entries }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
+    // 日期 → 列號、目前的更新時間
+    const rowOf = {}, tsOf = {};
+    rows.forEach((row, i) => {
+      const d = toISODate(row[0]);
+      if (d && !rowOf[d]) { rowOf[d] = i + 2; tsOf[d] = toMillis(row[3]); }
+    });
 
     // 寫入單筆：以「更新時間較新者為準」，較舊的請求不會覆蓋表單內較新的資料
-    function upsert(item, dateValues, lastRow) {
+    function upsert(item) {
       const date = toISODate(item.date);
       if (!date) return { date: '', result: 'invalid' };
-      const content = (item.content || '').toString().trim();
+      const isDel = item.deleted === true;
+      const content = isDel ? '' : (item.content || '').toString().trim();
       const tagsArr = Array.isArray(item.tags) ? item.tags : (item.tags ? String(item.tags).split(/[、,，]/) : []);
-      const tagsTrim = tagsArr.map(s => String(s).trim()).filter(Boolean).join('、');
-      if (!content && !tagsTrim) return { date: date, result: 'skipped' };
-
-      const ts = Number(item.updatedAt) > 0 ? new Date(Number(item.updatedAt)) : new Date();
-      let foundRow = -1;
-      for (let i = 0; i < dateValues.length; i++) {
-        if (toISODate(dateValues[i][0]) === date) { foundRow = i + 2; break; }
+      const tagsTrim = isDel ? '' : tagsArr.map(s => String(s).trim()).filter(Boolean).join('、');
+      if (!isDel && !content && !tagsTrim) return { date: date, result: 'skipped' };
+      const t = Number(item.updatedAt) > 0 ? Number(item.updatedAt) : Date.now();
+      if (rowOf[date]) {
+        if (item.updatedAt && tsOf[date] > t) return { date: date, result: 'stale' };
+        sheet.getRange(rowOf[date], 1, 1, 4).setValues([[date, content, tagsTrim, new Date(t)]]);
+        tsOf[date] = t;
+        return { date: date, result: isDel ? 'deleted' : 'updated' };
       }
-      if (foundRow > 0) {
-        const cur = sheet.getRange(foundRow, 4).getValue();
-        const curTs = cur instanceof Date ? cur.getTime() : 0;
-        if (item.updatedAt && curTs > ts.getTime()) return { date: date, result: 'stale' };
-        sheet.getRange(foundRow, 1, 1, 4).setValues([[date, content, tagsTrim, ts]]);
-        return { date: date, result: 'updated' };
-      }
-      sheet.appendRow([date, content, tagsTrim, ts]);
+      if (isDel) return { date: date, result: 'skipped' };
+      sheet.appendRow([date, content, tagsTrim, new Date(t)]);
+      rowOf[date] = sheet.getLastRow(); tsOf[date] = t;
       return { date: date, result: 'added' };
     }
 
-    const lastRow0 = sheet.getLastRow();
-    const dateValues = lastRow0 >= 2 ? sheet.getRange(2, 1, lastRow0 - 1, 1).getValues() : [];
-
     if (action === 'saveBatch') {
       const items = Array.isArray(data.entries) ? data.entries : [];
-      const results = items.map(it => upsert(it, dateValues, lastRow0));
-      return ContentService.createTextOutput(JSON.stringify({ status: 'ok', results: results }))
-        .setMimeType(ContentService.MimeType.JSON);
+      return out({ status: 'ok', results: items.map(upsert) });
     }
 
-    // === save ===
-    const r = upsert(data, dateValues, lastRow0);
-    if (r.result === 'invalid') {
-      return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: '無效日期' }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    return ContentService.createTextOutput(JSON.stringify({ status: 'ok', date: r.date, result: r.result, skipped: r.result === 'skipped', stale: r.result === 'stale' }))
-      .setMimeType(ContentService.MimeType.JSON);
-
+    // save（單筆，相容舊版）
+    const r = upsert(data);
+    if (r.result === 'invalid') return out({ status: 'error', message: '無效日期' });
+    return out({ status: 'ok', date: r.date, result: r.result, skipped: r.result === 'skipped', stale: r.result === 'stale' });
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return out({ status: 'error', message: err.toString() });
+  } finally {
+    lock.releaseLock();
   }
 }
 </script>
@@ -734,8 +760,8 @@ const DEFAULT_SYSTEM_PROMPT = '你是專業的工作日誌整理助手。請一�
 
 function loadData() {
   const defaultData = {
-    entries: {},
-    settings: { apiKey: '', apiBase: 'https://api.openai.com/v1', model: 'gpt-4o-mini', sheetUrl: '', systemPrompt: DEFAULT_SYSTEM_PROMPT }
+    entries: {}, deleted: {},
+    settings: { apiKey: '', apiBase: 'https://api.openai.com/v1', model: 'gpt-4o-mini', sheetUrl: '', sheetToken: '', systemPrompt: DEFAULT_SYSTEM_PROMPT }
   };
   if (!isStorageAvailable()) return defaultData;
   try {
@@ -745,6 +771,8 @@ function loadData() {
     if (!data.entries) data.entries = {};
     if (!data.settings) data.settings = defaultData.settings;
     if (!data.settings.sheetUrl) data.settings.sheetUrl = '';
+    if (!data.settings.sheetToken) data.settings.sheetToken = '';
+    if (!data.deleted) data.deleted = {};
     if (!data.settings.systemPrompt) data.settings.systemPrompt = DEFAULT_SYSTEM_PROMPT;
     return data;
   } catch (e) {
@@ -792,10 +820,21 @@ function getEntry(date) {
 }
 
 // ts：更新時間（毫秒）。使用者編輯時省略＝現在；從試算表同步時帶入遠端時間
+// 刪除時留下「墓碑」（appData.deleted[date] = 刪除時間），上傳成功後才移除，避免被同步又下載回來
 function setEntry(date, entry, ts) {
-  if (!entry.content.trim() && (!entry.tags || entry.tags.length === 0)) delete appData.entries[date];
-  else { entry.updatedAt = ts || Date.now(); appData.entries[date] = entry; }
+  if (!entry.content.trim() && (!entry.tags || entry.tags.length === 0)) {
+    if (appData.entries[date]) {
+      appData.deleted = appData.deleted || {};
+      appData.deleted[date] = ts || Date.now();
+    }
+    delete appData.entries[date];
+  } else {
+    entry.updatedAt = ts || Date.now();
+    appData.entries[date] = entry;
+    if (appData.deleted) delete appData.deleted[date];
+  }
   saveData(appData);
+  scheduleAutoSync();
 }
 
 function collectAllTags() {
@@ -1079,106 +1118,213 @@ async function aiSummarize() {
 }
 
 // ========== 同步 ==========
-async function autoSyncToSheet() {
-  const url = (appData.settings.sheetUrl || '').trim();
-  if (!url) return;
-  const entry = getEntry(currentDate);
-  const content = contentEl.value.trim();
-  const tags = entry.tags || [];
-  if (!content && tags.length === 0) return;
-  if (window._syncing) return;
-  window._syncing = true;
-  try {
-    await fetch(url, {
-      method: 'POST', mode: 'cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'save', date: currentDate, content, tags, updatedAt: entry.updatedAt || Date.now() })
-    });
-    saveStatus.textContent = '已自動儲存並同步';
-    saveStatus.style.color = 'var(--success)';
-    setTimeout(() => { if (saveStatus.textContent === '已自動儲存並同步') updateSaveStatus(true); }, 2000);
-  } catch (e) {
-    saveStatus.textContent = '同步失敗（已本機儲存）';
-    saveStatus.style.color = 'var(--danger)';
-  } finally {
-    window._syncing = false;
-  }
+// 規則：每筆記錄有 updatedAt（最後編輯時間）與 base（上次成功同步時的 updatedAt）。
+//  - updatedAt > base ＝ 有尚未上傳的修改
+//  - 兩邊自上次同步後都被修改 ＝ 衝突，保留兩份內容（不會遺失）
+//  - 其餘情況以「較新者為準」
+const SYNC = { queue: Promise.resolve(), timer: null, lastFull: 0, running: 0 };
+function getSheetUrl() { return (appData.settings.sheetUrl || '').trim(); }
+
+async function gasPost(body, opts = {}) {
+  const res = await fetch(getSheetUrl(), {
+    method: 'POST', mode: 'cors', keepalive: !!opts.keepalive,
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ ...body, token: (appData.settings.sheetToken || '').trim() })
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  let json;
+  try { json = await res.json(); }
+  catch (e) { throw new Error('伺服器回應不是 JSON（網址可能不是 /exec，或部署權限不是「所有人」）'); }
+  if (json && json.status === 'error') throw new Error(json.message || '伺服器錯誤');
+  return json;
 }
 
-$('syncBtn').onclick = async () => {
-  const url = (appData.settings.sheetUrl || '').trim();
-  if (!url) {
-    showToast('請先到「設定」填入 Google 試算表 Apps Script 網址。');
-    openSettings();
-    return;
+function setSyncStatus(text, kind) {
+  saveStatus.textContent = text;
+  saveStatus.style.color = kind === 'error' ? 'var(--danger)' : kind === 'ok' ? 'var(--success)' : 'var(--muted)';
+  if (kind === 'ok') setTimeout(() => { if (saveStatus.textContent === text) updateSaveStatus(true); }, 2500);
+}
+
+// 所有同步工作排成一條佇列，依序執行，不會因「正在同步」而漏掉後來的修改
+function enqueueSync(task) {
+  SYNC.running++;
+  const run = async () => { try { return await task(); } finally { SYNC.running--; } };
+  SYNC.queue = SYNC.queue.then(run, run);
+  return SYNC.queue;
+}
+
+function collectPending() {
+  const out = [];
+  Object.entries(appData.entries).forEach(([date, e]) => {
+    if ((e.updatedAt || 0) > (e.base || 0)) out.push({ date, content: e.content, tags: e.tags || [], updatedAt: e.updatedAt || Date.now() });
+  });
+  Object.entries(appData.deleted || {}).forEach(([date, ts]) => out.push({ date, content: '', tags: [], deleted: true, updatedAt: ts }));
+  return out;
+}
+
+async function pushPending(opts) {
+  const items = collectPending();
+  if (!items.length) return { pushed: 0, stale: 0 };
+  const resp = await gasPost({ action: 'saveBatch', entries: items }, opts);
+  let pushed = 0, stale = 0;
+  items.forEach((it, i) => {
+    const r = (resp.results || [])[i] || {};
+    if (r.result === 'stale') { stale++; return; }
+    if (r.result === 'invalid') return;
+    if (it.deleted) {
+      if (appData.deleted && appData.deleted[it.date] === it.updatedAt) delete appData.deleted[it.date];
+    } else {
+      const e = appData.entries[it.date];
+      if (e && e.updatedAt === it.updatedAt) e.base = it.updatedAt;   // 上傳期間若又被編輯，就保留為待上傳
+    }
+    pushed++;
+  });
+  saveData(appData);
+  return { pushed, stale };
+}
+
+function parseRemote(json) {
+  let list = json.entries || json.data || json;
+  if (!Array.isArray(list)) list = Object.keys(list).map(d => ({ date: d, ...list[d] }));
+  const remote = {};
+  list.forEach(r => {
+    if (!r || !r.date) return;
+    const date = String(r.date).slice(0, 10);
+    const tags = Array.isArray(r.tags) ? r.tags : String(r.tags || '').split(/[,，、]/).map(t => t.trim()).filter(Boolean);
+    const content = String(r.content || '').trim();
+    remote[date] = { content, tags, updatedAt: Number(r.updatedAt) || 0, deleted: !content && tags.length === 0 };
+  });
+  return remote;
+}
+
+const entrySig = e => (e.content || '').trim() + '\u0000' + (e.tags || []).join('、');
+
+// 比對本機與遠端，回傳 { pulled, merged, touchedCurrent }
+function reconcile(remote) {
+  appData.deleted = appData.deleted || {};
+  let pulled = 0, merged = 0, touchedCurrent = false;
+  const touch = date => { if (date === currentDate) touchedCurrent = true; };
+  const applyRemote = (date, r) => {
+    if (r.deleted) delete appData.entries[date];
+    else {
+      const ts = r.updatedAt || Date.now();
+      appData.entries[date] = { content: r.content, tags: r.tags, updatedAt: ts, base: ts };
+    }
+    delete appData.deleted[date];
+    pulled++; touch(date);
+  };
+  const dates = new Set([...Object.keys(appData.entries), ...Object.keys(appData.deleted), ...Object.keys(remote)]);
+  dates.forEach(date => {
+    const e = appData.entries[date];
+    const delTs = appData.deleted[date];
+    const l = e || (delTs ? { deleted: true, content: '', tags: [], updatedAt: delTs } : null);
+    const r = remote[date];
+    if (!l && !r) return;
+    if (!r) {                                      // 遠端沒有：本機內容要上傳；墓碑不需要
+      if (e) e.base = 0; else delete appData.deleted[date];
+      return;
+    }
+    if (!l) { if (!r.deleted) applyRemote(date, r); return; }   // 本機沒有：下載（遠端已刪除則略過）
+    if (entrySig(l) === entrySig(r)) {             // 內容相同：視為已同步
+      if (e) e.base = e.updatedAt = Math.max(e.updatedAt || 0, r.updatedAt || 0);
+      else delete appData.deleted[date];
+      return;
+    }
+    const base = e ? (e.base || 0) : 0;
+    if (e && base > 0 && e.updatedAt > base && r.updatedAt > base && !r.deleted) {
+      // 衝突：兩邊自上次同步後都改過 → 較新的當主文，較舊的附在後面，標籤取聯集
+      const localNewer = e.updatedAt >= r.updatedAt;
+      const a = localNewer ? e : r, b = localNewer ? r : e;
+      let content = (a.content || '').trim();
+      if ((b.content || '').trim() && (b.content || '').trim() !== content) {
+        content += (content ? '\n\n' : '') + '--- ⚠️ 同步衝突：另一個版本（請手動整理後刪除此段） ---\n' + b.content.trim();
+      }
+      const tags = [...new Set([...(e.tags || []), ...(r.tags || [])])];
+      appData.entries[date] = { content, tags, updatedAt: Date.now(), base: 0 };
+      merged++; touch(date);
+    } else if (l.updatedAt >= r.updatedAt) {       // 本機較新（或相同）：標記待上傳
+      if (e) e.base = 0;
+    } else {                                       // 遠端較新：下載
+      applyRemote(date, r);
+    }
+  });
+  saveData(appData);
+  return { pulled, merged, touchedCurrent };
+}
+
+function refreshViews(touchedCurrent, editorBefore) {
+  if (touchedCurrent && contentEl.value === editorBefore) loadEditor(currentDate, { focus: false });
+  else { renderCalendar(); renderEntryList(); renderAllTags(); }
+  renderTagFilters();
+}
+
+// 完整雙向同步（先拉取、比對，再上傳）
+function syncNow(opts = {}) {
+  if (!getSheetUrl()) {
+    if (!opts.silent) { showToast('請先到「設定」填入 Google 試算表 Apps Script 網址。'); openSettings(); }
+    return Promise.resolve();
   }
   flushSave();
   const btn = $('syncBtn');
   btn.disabled = true;
-  try {
-    const post = async body => {
-      const res = await fetch(url, {
-        method: 'POST', mode: 'cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(body)
-      });
-      return res.json();
-    };
-    // 1. 讀取試算表全部資料
-    const json = await post({ action: 'load' });
-    let list = json.entries || json.data || json;
-    if (!Array.isArray(list)) list = Object.keys(list).map(d => ({ date: d, ...list[d] }));
-    const remote = {};
-    list.forEach(r => {
-      if (!r || !r.date) return;
-      const date = String(r.date).slice(0, 10);
-      const tags = Array.isArray(r.tags) ? r.tags : String(r.tags || '').split(/[,，、]/).map(t => t.trim()).filter(Boolean);
-      remote[date] = { content: String(r.content || '').trim(), tags, updatedAt: Number(r.updatedAt) || 0 };
-    });
-
-    // 2. 逐日比較，以「更新時間較新」的一方為準
-    const sig = e => (e.content || '').trim() + '\u0000' + (e.tags || []).join('、');
-    const toPush = [];
-    let pulled = 0;
-    const dates = new Set([...Object.keys(appData.entries), ...Object.keys(remote)]);
-    dates.forEach(date => {
-      const l = appData.entries[date];
-      const r = remote[date];
-      if (l && !r) {
-        toPush.push({ date, content: l.content, tags: l.tags || [], updatedAt: l.updatedAt || Date.now() });
-      } else if (!l && r) {
-        setEntry(date, { content: r.content, tags: r.tags }, r.updatedAt || Date.now());
-        pulled++;
-      } else if (l && r && sig(l) !== sig(r)) {
-        const lt = l.updatedAt || 0;
-        if (lt > r.updatedAt) {
-          toPush.push({ date, content: l.content, tags: l.tags || [], updatedAt: lt });
-        } else if (r.updatedAt > lt) {
-          setEntry(date, { content: r.content, tags: r.tags }, r.updatedAt);
-          pulled++;
-        }
-        // 時間相同但內容不同（極少見）：不處理，保留本機
-      } else if (l && r && !l.updatedAt && r.updatedAt) {
-        l.updatedAt = r.updatedAt; // 內容相同，補上舊資料缺少的時間戳
+  return enqueueSync(async () => {
+    setSyncStatus('同步中…');
+    try {
+      const json = await gasPost({ action: 'load' });
+      flushSave();                                  // 納入等待期間剛輸入的內容
+      const editorBefore = contentEl.value;
+      const { pulled, merged, touchedCurrent } = reconcile(parseRemote(json));
+      const { pushed, stale } = await pushPending();
+      SYNC.lastFull = Date.now();
+      refreshViews(touchedCurrent, editorBefore);
+      setSyncStatus('已同步', 'ok');
+      if (!opts.silent) {
+        showToast(`雙向同步完成！\n上傳 ${pushed} 筆，下載 ${pulled} 筆` + (merged ? `，${merged} 筆衝突已合併（內文含「同步衝突」標記）` : '') + (stale ? `，${stale} 筆遠端較新已略過` : '') + '。', 'success');
+      } else if (pulled || merged) {
+        showToast(`已從試算表更新 ${pulled + merged} 筆記錄` + (merged ? `（含 ${merged} 筆衝突合併）` : ''), 'success');
       }
-    });
-
-    // 3. 上傳本機較新的資料
-    let pushed = 0;
-    if (toPush.length) {
-      const resp = await post({ action: 'saveBatch', entries: toPush });
-      pushed = (resp.results || []).filter(x => x.result === 'added' || x.result === 'updated').length;
+    } catch (e) {
+      setSyncStatus('同步失敗（已本機儲存）', 'error');
+      if (!opts.silent) showToast('同步失敗：' + e.message + '\n請確認：\n1. Apps Script 已更新並重新部署\n2. 網址正確（結尾 /exec）\n3. 部署權限為「所有人」\n4. 同步密碼與 Apps Script 相同', 'error');
+    } finally {
+      if (!SYNC.running || SYNC.running === 1) btn.disabled = false;
     }
-    saveData(appData);
-    loadEditor(currentDate, { focus: false });
-    renderTagFilters();
-    showToast(`雙向同步完成！\n上傳 ${pushed} 筆（本機較新），下載 ${pulled} 筆（試算表較新）。`, 'success');
-  } catch (e) {
-    showToast('同步失敗：' + e.message + '\n請確認：\n1. Apps Script 已更新並重新部署\n2. 網址正確\n3. 部署權限為「任何人」', 'error');
-  } finally {
-    btn.disabled = false;
-  }
-};
+  });
+}
+
+// 只上傳尚未同步的修改（編輯後自動呼叫）
+function autoSyncToSheet(opts = {}) {
+  if (!getSheetUrl()) return Promise.resolve();
+  clearTimeout(SYNC.timer); SYNC.timer = null;
+  flushSave();
+  if (!collectPending().length) return Promise.resolve();
+  return enqueueSync(async () => {
+    if (!collectPending().length) return;
+    setSyncStatus('同步中…');
+    try {
+      const { stale } = await pushPending(opts);
+      if (stale) { setSyncStatus('遠端有較新版本，重新同步…'); syncNow({ silent: true }); return; }
+      setSyncStatus('已自動儲存並同步', 'ok');
+    } catch (e) {
+      setSyncStatus('同步失敗（已本機儲存，稍後會自動重試）', 'error');
+    }
+  });
+}
+function scheduleAutoSync() {
+  if (!getSheetUrl()) return;
+  clearTimeout(SYNC.timer);
+  SYNC.timer = setTimeout(autoSyncToSheet, 2000);
+}
+
+$('syncBtn').onclick = () => syncNow();
+
+// 開啟／切回頁面／恢復網路時自動拉取，離開頁面時立刻上傳
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { autoSyncToSheet({ keepalive: true }); }
+  else if (Date.now() - SYNC.lastFull > 30000) syncNow({ silent: true });
+});
+window.addEventListener('online', () => syncNow({ silent: true }));
+window.addEventListener('pagehide', () => { autoSyncToSheet({ keepalive: true }); });
 
 // ========== 設定 ==========
 function openSettings() {
@@ -1186,6 +1332,7 @@ function openSettings() {
   $('apiBase').value = appData.settings.apiBase || 'https://api.openai.com/v1';
   $('model').value = appData.settings.model || 'gpt-4o-mini';
   $('sheetUrl').value = appData.settings.sheetUrl || '';
+  $('sheetToken').value = appData.settings.sheetToken || '';
   $('systemPrompt').value = appData.settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
   $('settingsModal').classList.add('active');
 }
@@ -1345,10 +1492,12 @@ $('saveSettingsBtn').onclick = () => {
   appData.settings.apiBase = $('apiBase').value.trim() || 'https://api.openai.com/v1';
   appData.settings.model = $('model').value.trim() || 'gpt-4o-mini';
   appData.settings.sheetUrl = $('sheetUrl').value.trim();
+  appData.settings.sheetToken = $('sheetToken').value.trim();
   appData.settings.systemPrompt = $('systemPrompt').value.trim() || DEFAULT_SYSTEM_PROMPT;
   saveData(appData);
   $('settingsModal').classList.remove('active');
   showToast('設定已儲存');
+  if (appData.settings.sheetUrl) syncNow({ silent: true });
 };
 $('resetSystemPromptBtn').onclick = () => { $('systemPrompt').value = DEFAULT_SYSTEM_PROMPT; };
 // 教學
@@ -1431,6 +1580,8 @@ fixBadYearsInData();
 if (window._storageDisabled) showStorageWarning();
 renderTagFilters();
 loadEditor(currentDate);
+if (getSheetUrl()) syncNow({ silent: true });
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
 </html>
