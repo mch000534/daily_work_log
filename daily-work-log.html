@@ -501,6 +501,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     <ul class="tut">
       <li><strong>修改程式碼後沒生效</strong>：每次改程式碼都要「部署 → 管理部署作業 → 編輯 → 版本：新版本 → 部署」，網址不變。</li>
       <li><strong>同步失敗</strong>：確認「誰可以存取」為「所有人」、網址結尾是 <code>/exec</code>（不是 <code>/dev</code>）。</li>
+      <li><strong>同步規則</strong>：每筆記錄都有「更新時間」，同步時以較新的一方為準（本機較新就上傳，試算表較新就下載）。更新應用程式後，請重新複製程式碼貼進 Apps Script 並<strong>重新部署（管理部署作業 → 編輯 → 新版本）</strong>。</li>
       <li><strong>同一天只保留一列</strong>：以日期為鍵，重複同步會更新而非新增。</li>
       <li><strong>隱私</strong>：網址知道的人都能寫入您的試算表，請勿公開分享該網址。</li>
     </ul>
@@ -553,9 +554,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
           const content = (row[1] || '').toString().trim();
           const tagsStr = (row[2] || '').toString().trim();
           if (!content && !tagsStr) return;
+          const ts = row[3] instanceof Date ? row[3].getTime() : (Number(new Date(row[3]).getTime()) || 0);
           entries[dateStr] = {
             content: content,
-            tags: tagsStr ? tagsStr.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : []
+            tags: tagsStr ? tagsStr.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : [],
+            updatedAt: ts
           };
         });
       }
@@ -563,44 +566,48 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
         .setMimeType(ContentService.MimeType.JSON);
     }
 
+    // 寫入單筆：以「更新時間較新者為準」，較舊的請求不會覆蓋表單內較新的資料
+    function upsert(item, dateValues, lastRow) {
+      const date = toISODate(item.date);
+      if (!date) return { date: '', result: 'invalid' };
+      const content = (item.content || '').toString().trim();
+      const tagsArr = Array.isArray(item.tags) ? item.tags : (item.tags ? String(item.tags).split(/[、,，]/) : []);
+      const tagsTrim = tagsArr.map(s => String(s).trim()).filter(Boolean).join('、');
+      if (!content && !tagsTrim) return { date: date, result: 'skipped' };
+
+      const ts = Number(item.updatedAt) > 0 ? new Date(Number(item.updatedAt)) : new Date();
+      let foundRow = -1;
+      for (let i = 0; i < dateValues.length; i++) {
+        if (toISODate(dateValues[i][0]) === date) { foundRow = i + 2; break; }
+      }
+      if (foundRow > 0) {
+        const cur = sheet.getRange(foundRow, 4).getValue();
+        const curTs = cur instanceof Date ? cur.getTime() : 0;
+        if (item.updatedAt && curTs > ts.getTime()) return { date: date, result: 'stale' };
+        sheet.getRange(foundRow, 1, 1, 4).setValues([[date, content, tagsTrim, ts]]);
+        return { date: date, result: 'updated' };
+      }
+      sheet.appendRow([date, content, tagsTrim, ts]);
+      return { date: date, result: 'added' };
+    }
+
+    const lastRow0 = sheet.getLastRow();
+    const dateValues = lastRow0 >= 2 ? sheet.getRange(2, 1, lastRow0 - 1, 1).getValues() : [];
+
+    if (action === 'saveBatch') {
+      const items = Array.isArray(data.entries) ? data.entries : [];
+      const results = items.map(it => upsert(it, dateValues, lastRow0));
+      return ContentService.createTextOutput(JSON.stringify({ status: 'ok', results: results }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     // === save ===
-    const date = toISODate(data.date);
-    if (!date) {
+    const r = upsert(data, dateValues, lastRow0);
+    if (r.result === 'invalid') {
       return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: '無效日期' }))
         .setMimeType(ContentService.MimeType.JSON);
     }
-    const content = (data.content || '').toString().trim();
-    const tagsArr = Array.isArray(data.tags) ? data.tags : (data.tags ? String(data.tags).split(/[、,，]/) : []);
-    const tagsTrim = tagsArr.map(s => String(s).trim()).filter(Boolean).join('、');
-
-    if (!content && !tagsTrim) {
-      return ContentService.createTextOutput(JSON.stringify({ status: 'ok', skipped: true }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    const now = new Date();
-    const lastRow = sheet.getLastRow();
-    let foundRow = -1;
-
-    if (lastRow >= 2) {
-      const dateValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-      for (let i = 0; i < dateValues.length; i++) {
-        if (toISODate(dateValues[i][0]) === date) {
-          foundRow = i + 2;
-          break;
-        }
-      }
-    }
-
-    if (foundRow > 0) {
-      // 更新現有列（同時把日期欄也改成標準格式）
-      sheet.getRange(foundRow, 1, 1, 4).setValues([[date, content, tagsTrim, now]]);
-    } else {
-      // 真的沒有才新增
-      sheet.appendRow([date, content, tagsTrim, now]);
-    }
-
-    return ContentService.createTextOutput(JSON.stringify({ status: 'ok', date: date, updated: foundRow > 0 }))
+    return ContentService.createTextOutput(JSON.stringify({ status: 'ok', date: r.date, result: r.result, skipped: r.result === 'skipped', stale: r.result === 'stale' }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
@@ -784,9 +791,10 @@ function getEntry(date) {
   return appData.entries[date] || { content: '', tags: [] };
 }
 
-function setEntry(date, entry) {
+// ts：更新時間（毫秒）。使用者編輯時省略＝現在；從試算表同步時帶入遠端時間
+function setEntry(date, entry, ts) {
   if (!entry.content.trim() && (!entry.tags || entry.tags.length === 0)) delete appData.entries[date];
-  else appData.entries[date] = entry;
+  else { entry.updatedAt = ts || Date.now(); appData.entries[date] = entry; }
   saveData(appData);
 }
 
@@ -1084,7 +1092,7 @@ async function autoSyncToSheet() {
     await fetch(url, {
       method: 'POST', mode: 'cors',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'save', date: currentDate, content, tags })
+      body: JSON.stringify({ action: 'save', date: currentDate, content, tags, updatedAt: entry.updatedAt || Date.now() })
     });
     saveStatus.textContent = '已自動儲存並同步';
     saveStatus.style.color = 'var(--success)';
@@ -1108,41 +1116,63 @@ $('syncBtn').onclick = async () => {
   const btn = $('syncBtn');
   btn.disabled = true;
   try {
-    const content = contentEl.value.trim();
-    const tags = getEntry(currentDate).tags || [];
-    let pushed = false;
-    if (content || tags.length) {
-      await fetch(url, {
+    const post = async body => {
+      const res = await fetch(url, {
         method: 'POST', mode: 'cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'save', date: currentDate, content, tags })
+        body: JSON.stringify(body)
       });
-      pushed = true;
-    }
-    const res = await fetch(url, {
-      method: 'POST', mode: 'cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'load' })
-    });
-    const json = await res.json();
+      return res.json();
+    };
+    // 1. 讀取試算表全部資料
+    const json = await post({ action: 'load' });
     let list = json.entries || json.data || json;
     if (!Array.isArray(list)) list = Object.keys(list).map(d => ({ date: d, ...list[d] }));
-    let merged = 0;
+    const remote = {};
     list.forEach(r => {
       if (!r || !r.date) return;
       const date = String(r.date).slice(0, 10);
-      const rc = String(r.content || '').trim();
-      const rt = Array.isArray(r.tags) ? r.tags : String(r.tags || '').split(/[,，]/).map(t => t.trim()).filter(Boolean);
-      const local = appData.entries[date];
-      if (!local || (!local.content && rc)) {
-        setEntry(date, { content: rc, tags: rt });
-        merged++;
+      const tags = Array.isArray(r.tags) ? r.tags : String(r.tags || '').split(/[,，、]/).map(t => t.trim()).filter(Boolean);
+      remote[date] = { content: String(r.content || '').trim(), tags, updatedAt: Number(r.updatedAt) || 0 };
+    });
+
+    // 2. 逐日比較，以「更新時間較新」的一方為準
+    const sig = e => (e.content || '').trim() + '\u0000' + (e.tags || []).join('、');
+    const toPush = [];
+    let pulled = 0;
+    const dates = new Set([...Object.keys(appData.entries), ...Object.keys(remote)]);
+    dates.forEach(date => {
+      const l = appData.entries[date];
+      const r = remote[date];
+      if (l && !r) {
+        toPush.push({ date, content: l.content, tags: l.tags || [], updatedAt: l.updatedAt || Date.now() });
+      } else if (!l && r) {
+        setEntry(date, { content: r.content, tags: r.tags }, r.updatedAt || Date.now());
+        pulled++;
+      } else if (l && r && sig(l) !== sig(r)) {
+        const lt = l.updatedAt || 0;
+        if (lt > r.updatedAt) {
+          toPush.push({ date, content: l.content, tags: l.tags || [], updatedAt: lt });
+        } else if (r.updatedAt > lt) {
+          setEntry(date, { content: r.content, tags: r.tags }, r.updatedAt);
+          pulled++;
+        }
+        // 時間相同但內容不同（極少見）：不處理，保留本機
+      } else if (l && r && !l.updatedAt && r.updatedAt) {
+        l.updatedAt = r.updatedAt; // 內容相同，補上舊資料缺少的時間戳
       }
     });
+
+    // 3. 上傳本機較新的資料
+    let pushed = 0;
+    if (toPush.length) {
+      const resp = await post({ action: 'saveBatch', entries: toPush });
+      pushed = (resp.results || []).filter(x => x.result === 'added' || x.result === 'updated').length;
+    }
     saveData(appData);
     loadEditor(currentDate, { focus: false });
     renderTagFilters();
-    showToast(`雙向同步完成！\n${pushed ? '已上傳這一天的記錄' : '這一天無內容，未上傳'}，並從試算表合併 ${merged} 筆資料。`, 'success');
+    showToast(`雙向同步完成！\n上傳 ${pushed} 筆（本機較新），下載 ${pulled} 筆（試算表較新）。`, 'success');
   } catch (e) {
     showToast('同步失敗：' + e.message + '\n請確認：\n1. Apps Script 已更新並重新部署\n2. 網址正確\n3. 部署權限為「任何人」', 'error');
   } finally {
