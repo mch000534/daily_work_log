@@ -9,7 +9,7 @@
 1. 用瀏覽器直接開啟此檔案即可（無需伺服器）。
 2. 右側為編輯區，內容自動儲存到本機瀏覽器；左側可用日曆、搜尋、標籤快速找到過往記錄。
 3. 快捷鍵：Ctrl/⌘+K 搜尋、Alt+← / Alt+→ 前後一天、Alt+T 回到今天、Alt+P 切換 Markdown 預覽。
-4. 「設定」可填入 LLM API Key（OpenAI 相容）與 Google 試算表同步網址。
+4. 「設定」可填入 LLM API Key（OpenAI 相容）與 Google 試算表同步網址（設定內附「Google 試算表設定教學」與可複製的程式碼）。
 5. 資料僅存在本機 localStorage；可隨時匯出 JSON 備份。
 -->
 <style>
@@ -267,6 +267,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   font: inherit; font-size: .95rem; background: var(--surface-2); color: var(--text);
 }
 .modal textarea { min-height: 220px; line-height: 1.6; }
+.modal ol.tut, .modal ul.tut { margin: 6px 0 0; padding-left: 1.4em; font-size: .88rem; line-height: 1.7; }
+.modal .tut code { font-family: ui-monospace, Menlo, Consolas, monospace; background: var(--tag-bg); padding: .05em .35em; border-radius: 4px; }
 .modal .hint { color: var(--muted); font-size: .82rem; margin: 4px 0 0; }
 .modal hr { margin: 16px 0; border: none; border-top: 1px solid var(--border); }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
@@ -434,11 +436,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     <input type="text" id="apiBase" placeholder="https://api.openai.com/v1">
     <label for="model">模型名稱</label>
     <input type="text" id="model" placeholder="gpt-4o-mini">
+    <label for="systemPrompt">System Prompt</label>
+    <textarea id="systemPrompt" style="min-height:120px;"></textarea>
+    <button id="resetSystemPromptBtn" class="btn" type="button" style="margin-top:6px;">還原預設</button>
     <hr>
     <h3 style="margin-top:0">Google 試算表同步</h3>
     <label for="sheetUrl">Apps Script 網址</label>
     <input type="text" id="sheetUrl" placeholder="https://script.google.com/macros/s/.../exec">
     <p class="hint">部署 Apps Script 後貼上「網頁應用程式」網址。設定後離開輸入框會自動同步當天記錄。</p>
+    <button id="openTutorialBtn" class="btn" type="button" style="margin-top:8px;">📘 Google 試算表設定教學</button>
     <hr>
     <button id="clearLocalBtn" class="btn danger" style="width:100%;justify-content:center;">清除所有本地記錄</button>
     <p class="hint">此操作無法復原，建議先匯出備份。不會影響 Google 試算表。</p>
@@ -448,6 +454,161 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     </div>
   </div>
 </div>
+
+<!-- Google 試算表教學 Modal -->
+<div id="tutorialModal" class="modal-overlay">
+  <div class="modal" style="max-width:720px;">
+    <h2>Google 試算表同步教學</h2>
+    <p class="hint">約 5 分鐘即可完成。資料會存在您自己的 Google 試算表，可跨裝置同步。</p>
+
+    <h3>步驟 1：建立試算表與標題列</h3>
+    <ol class="tut">
+      <li>前往 <a href="https://sheets.new" target="_blank" rel="noopener">sheets.new</a> 建立新的空白試算表，可命名為「每日工作紀錄」。</li>
+      <li>在<strong>第 1 列</strong>依序填入標題（A～D 欄）：<code>日期</code>、<code>內容</code>、<code>標籤</code>、<code>更新時間</code>。</li>
+      <li>資料會寫入「目前使用中的工作表」，請保持只有一個工作表，或確保要寫入的工作表是開啟時的第一個分頁。</li>
+    </ol>
+
+    <h3>步驟 2：貼上 Apps Script 程式碼</h3>
+    <ol class="tut">
+      <li>在試算表選單點「<strong>擴充功能 → Apps Script</strong>」。</li>
+      <li>刪除編輯器內原有的 <code>function myFunction() {}</code>。</li>
+      <li>按下方按鈕複製程式碼並貼上，按 <code>Ctrl/⌘ + S</code> 儲存。</li>
+    </ol>
+    <div style="display:flex;gap:8px;margin:8px 0;">
+      <button id="copyGasBtn" class="btn primary" type="button">複製程式碼</button>
+    </div>
+    <details>
+      <summary style="cursor:pointer;font-size:.9rem;">展開檢視程式碼</summary>
+      <pre id="gasCode" style="max-height:260px;overflow:auto;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:.78rem;line-height:1.5;"></pre>
+    </details>
+
+    <h3>步驟 3：部署為網頁應用程式</h3>
+    <ol class="tut">
+      <li>點右上角「<strong>部署 → 新增部署作業</strong>」。</li>
+      <li>點齒輪圖示，選擇類型「<strong>網頁應用程式</strong>」。</li>
+      <li>「執行身分」選<strong>我</strong>；「誰可以存取」選<strong>所有人</strong>（網頁才能從瀏覽器呼叫）。</li>
+      <li>按「部署」，依提示<strong>授權</strong>（若出現「Google 尚未驗證這個應用程式」，點「進階 → 前往（不安全）」，這是您自己寫的腳本）。</li>
+      <li>複製產生的「<strong>網頁應用程式網址</strong>」，格式為 <code>https://script.google.com/macros/s/…/exec</code>。</li>
+    </ol>
+
+    <h3>步驟 4：貼回本應用程式</h3>
+    <ol class="tut">
+      <li>關閉本視窗，把網址貼到「Apps Script 網址」欄位，按「儲存」。</li>
+      <li>在編輯區輸入內容後點到別處，會自動同步當天記錄；也可按上方「同步」做雙向同步。</li>
+    </ol>
+
+    <h3>常見問題</h3>
+    <ul class="tut">
+      <li><strong>修改程式碼後沒生效</strong>：每次改程式碼都要「部署 → 管理部署作業 → 編輯 → 版本：新版本 → 部署」，網址不變。</li>
+      <li><strong>同步失敗</strong>：確認「誰可以存取」為「所有人」、網址結尾是 <code>/exec</code>（不是 <code>/dev</code>）。</li>
+      <li><strong>同一天只保留一列</strong>：以日期為鍵，重複同步會更新而非新增。</li>
+      <li><strong>隱私</strong>：網址知道的人都能寫入您的試算表，請勿公開分享該網址。</li>
+    </ul>
+
+    <div class="modal-actions">
+      <button id="closeTutorialBtn" class="btn">關閉</button>
+    </div>
+  </div>
+</div>
+
+<script type="text/plain" id="gasSource">function doPost(e) {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const data = JSON.parse(e.postData.contents);
+    const action = data.action || 'save';
+
+    // 統一轉成 YYYY-MM-DD
+    function toISODate(val) {
+      if (!val) return '';
+      if (val instanceof Date && !isNaN(val.getTime())) {
+        return Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      }
+      const str = String(val).trim();
+      // 中文：2026年11月23日星期一
+      let m = str.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+      if (m) {
+        return m[1] + '-' + ('0'+m[2]).slice(-2) + '-' + ('0'+m[3]).slice(-2);
+      }
+      // 標準 ISO
+      m = str.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (m) {
+        return m[1] + '-' + ('0'+m[2]).slice(-2) + '-' + ('0'+m[3]).slice(-2);
+      }
+      // 其他嘗試
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      }
+      return '';
+    }
+
+    if (action === 'load') {
+      const lastRow = sheet.getLastRow();
+      const entries = {};
+      if (lastRow >= 2) {
+        const values = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+        values.forEach(row => {
+          const dateStr = toISODate(row[0]);
+          if (!dateStr) return;
+          const content = (row[1] || '').toString().trim();
+          const tagsStr = (row[2] || '').toString().trim();
+          if (!content && !tagsStr) return;
+          entries[dateStr] = {
+            content: content,
+            tags: tagsStr ? tagsStr.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : []
+          };
+        });
+      }
+      return ContentService.createTextOutput(JSON.stringify({ status: 'ok', entries }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // === save ===
+    const date = toISODate(data.date);
+    if (!date) {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: '無效日期' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    const content = (data.content || '').toString().trim();
+    const tagsArr = Array.isArray(data.tags) ? data.tags : (data.tags ? String(data.tags).split(/[、,，]/) : []);
+    const tagsTrim = tagsArr.map(s => String(s).trim()).filter(Boolean).join('、');
+
+    if (!content && !tagsTrim) {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'ok', skipped: true }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const now = new Date();
+    const lastRow = sheet.getLastRow();
+    let foundRow = -1;
+
+    if (lastRow >= 2) {
+      const dateValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = 0; i < dateValues.length; i++) {
+        if (toISODate(dateValues[i][0]) === date) {
+          foundRow = i + 2;
+          break;
+        }
+      }
+    }
+
+    if (foundRow > 0) {
+      // 更新現有列（同時把日期欄也改成標準格式）
+      sheet.getRange(foundRow, 1, 1, 4).setValues([[date, content, tagsTrim, now]]);
+    } else {
+      // 真的沒有才新增
+      sheet.appendRow([date, content, tagsTrim, now]);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ status: 'ok', date: date, updated: foundRow > 0 }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+</script>
 
 <!-- AI 結果 Modal -->
 <div id="aiModal" class="modal-overlay">
@@ -562,10 +723,12 @@ function isStorageAvailable() {
   return window._storageAvailable;
 }
 
+const DEFAULT_SYSTEM_PROMPT = '你是專業的工作日誌整理助手。請一律使用繁體中文回應，將使用者提供的每日工作記錄整理成簡潔、有條理的摘要。使用條列式重點，保留重要細節、成果與待辦事項。只根據記錄內容整理，不要捏造資訊，也不要添加額外評論。';
+
 function loadData() {
   const defaultData = {
     entries: {},
-    settings: { apiKey: '', apiBase: 'https://api.openai.com/v1', model: 'gpt-4o-mini', sheetUrl: '' }
+    settings: { apiKey: '', apiBase: 'https://api.openai.com/v1', model: 'gpt-4o-mini', sheetUrl: '', systemPrompt: DEFAULT_SYSTEM_PROMPT }
   };
   if (!isStorageAvailable()) return defaultData;
   try {
@@ -575,6 +738,7 @@ function loadData() {
     if (!data.entries) data.entries = {};
     if (!data.settings) data.settings = defaultData.settings;
     if (!data.settings.sheetUrl) data.settings.sheetUrl = '';
+    if (!data.settings.systemPrompt) data.settings.systemPrompt = DEFAULT_SYSTEM_PROMPT;
     return data;
   } catch (e) {
     window._storageDisabled = true;
@@ -876,13 +1040,17 @@ async function aiSummarize() {
   btn.disabled = true;
   btn.innerHTML = '<svg class="i spin" aria-hidden="true"><use href="#i-loader"/></svg><span class="txt">整理中...</span>';
   try {
-    const prompt = `請將以下每日工作記錄整理成簡潔、有條理的繁體中文摘要。使用條列式重點，保留重要細節、成果與待辦事項。不要添加額外評論。\n\n記錄內容：\n${text}`;
+    const systemPrompt = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+    const prompt = `記錄內容：\n${text}`;
     const res = await fetch(`${settings.apiBase.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.apiKey}` },
       body: JSON.stringify({
         model: settings.model || 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt }
+        ],
         temperature: 0.3,
         max_tokens: 1000
       })
@@ -984,6 +1152,7 @@ function openSettings() {
   $('apiBase').value = appData.settings.apiBase || 'https://api.openai.com/v1';
   $('model').value = appData.settings.model || 'gpt-4o-mini';
   $('sheetUrl').value = appData.settings.sheetUrl || '';
+  $('systemPrompt').value = appData.settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
   $('settingsModal').classList.add('active');
 }
 
@@ -1142,9 +1311,27 @@ $('saveSettingsBtn').onclick = () => {
   appData.settings.apiBase = $('apiBase').value.trim() || 'https://api.openai.com/v1';
   appData.settings.model = $('model').value.trim() || 'gpt-4o-mini';
   appData.settings.sheetUrl = $('sheetUrl').value.trim();
+  appData.settings.systemPrompt = $('systemPrompt').value.trim() || DEFAULT_SYSTEM_PROMPT;
   saveData(appData);
   $('settingsModal').classList.remove('active');
   showToast('設定已儲存');
+};
+$('resetSystemPromptBtn').onclick = () => { $('systemPrompt').value = DEFAULT_SYSTEM_PROMPT; };
+// 教學
+$('openTutorialBtn').onclick = () => {
+  $('gasCode').textContent = $('gasSource').textContent.trim();
+  $('settingsModal').classList.remove('active');
+  $('tutorialModal').classList.add('active');
+};
+$('closeTutorialBtn').onclick = () => $('tutorialModal').classList.remove('active');
+$('copyGasBtn').onclick = async () => {
+  const text = $('gasSource').textContent.trim();
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); ta.remove();
+  }
+  showToast('程式碼已複製，請貼到 Apps Script 編輯器。');
 };
 $('closeSettingsBtn').onclick = () => $('settingsModal').classList.remove('active');
 
