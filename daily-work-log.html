@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>每日工作紀錄</title>
+<!--
+使用方式：
+1. 用瀏覽器直接開啟此檔案即可（無需伺服器）。
+2. 右側為編輯區，內容自動儲存到本機瀏覽器；左側可用日曆、搜尋、標籤快速找到過往記錄。
+3. 快捷鍵：Ctrl/⌘+K 搜尋、Alt+← / Alt+→ 前後一天、Alt+T 回到今天、Alt+P 切換 Markdown 預覽。
+4. 「設定」可填入 LLM API Key（OpenAI 相容）與 Google 試算表同步網址。
+5. 資料僅存在本機 localStorage；可隨時匯出 JSON 備份。
+-->
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f4f6fa;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --text: #1e293b;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #e8efff;
+  --border: #e2e8f0;
+  --tag-bg: #eef2ff;
+  --tag-text: #3730a3;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(15,23,42,.08);
+  --topbar-h: 56px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --surface-2: #172033;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #5b8def; --accent-hover: #7aa2f7;
+    --accent-soft: #24365e; --border: #334155; --tag-bg: #2a3350; --tag-text: #c7d2fe;
+    --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  overflow: hidden;
+}
+button { font: inherit; cursor: pointer; }
+.i { width: 1.15em; height: 1.15em; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.2em; }
+.i.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+
+/* ===== App shell ===== */
+.app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+.topbar {
+  height: var(--topbar-h);
+  flex: none;
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.brand { font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
+.spacer { flex: 1; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: .9rem; font-weight: 500;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--surface-2); border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: var(--accent-hover); }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.icon { padding: 7px 10px; }
+.btn:disabled { opacity: .6; cursor: progress; }
+
+.layout {
+  flex: 1; min-height: 0;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+}
+
+/* ===== Sidebar ===== */
+.sidebar {
+  display: flex; flex-direction: column; min-height: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.side-top { flex: none; padding: 12px; border-bottom: 1px solid var(--border); }
+.search-box { position: relative; }
+.search-box input {
+  width: 100%; padding: 9px 12px 9px 34px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-2); color: var(--text); font-size: .92rem;
+}
+.search-box > .i { position: absolute; left: 10px; top: 50%; margin-top: -.5em; width: 1em; height: 1em; color: var(--muted); pointer-events: none; }
+.filter-toggle { margin-top: 8px; font-size: .82rem; color: var(--muted); background: none; border: none; padding: 2px 0; }
+.filter-toggle:hover { color: var(--accent); }
+.filter-toggle .i { width: 1em; height: 1em; transition: transform .15s; }
+.filter-toggle.open .i { transform: rotate(90deg); }
+.filter-panel { display: none; margin-top: 8px; gap: 8px; flex-direction: column; }
+.filter-panel.open { display: flex; }
+.filter-panel .row { display: flex; gap: 6px; align-items: center; }
+.filter-panel input, .filter-panel select {
+  flex: 1; min-width: 0; padding: 6px 8px; font-size: .85rem;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text);
+}
+#tagFilters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.cal { padding: 12px; border-bottom: 1px solid var(--border); flex: none; }
+.calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-weight: 600; }
+.calendar-header button {
+  width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text);
+}
+.calendar-header button:hover { border-color: var(--accent); }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.calendar-grid .day-name { text-align: center; font-size: .72rem; color: var(--muted); padding: 2px 0; }
+.calendar-day {
+  height: 32px; display: flex; align-items: center; justify-content: center;
+  border-radius: 8px; cursor: pointer; font-size: .85rem; position: relative;
+  color: var(--text); border: 1px solid transparent;
+}
+.calendar-day:hover { background: var(--surface-2); border-color: var(--border); }
+.calendar-day.has-entry::after {
+  content: ""; position: absolute; bottom: 3px; left: 50%; width: 5px; height: 5px;
+  margin-left: -2.5px; border-radius: 50%; background: var(--accent);
+}
+.calendar-day.today { border-color: var(--accent); font-weight: 700; }
+.calendar-day.selected { background: var(--accent); color: #fff; }
+.calendar-day.selected::after { background: #fff; }
+
+.list-head { flex: none; display: flex; justify-content: space-between; padding: 8px 12px 4px; font-size: .78rem; color: var(--muted); }
+.entry-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+.entry-item {
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); cursor: pointer;
+}
+.entry-item:hover { border-color: var(--accent); }
+.entry-item.current { background: var(--accent-soft); border-color: var(--accent); }
+.entry-date { font-weight: 600; font-size: .88rem; }
+.entry-preview {
+  color: var(--muted); font-size: .84rem; margin-top: 2px;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; word-break: break-word;
+}
+.entry-tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.empty { color: var(--muted); text-align: center; padding: 24px 8px; font-size: .9rem; }
+
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 10px; border-radius: 999px; font-size: .8rem;
+  background: var(--tag-bg); color: var(--tag-text);
+  border: 1px solid transparent; cursor: pointer; user-select: none;
+}
+.tag-chip.selected { background: var(--accent); color: #fff; }
+.tag-chip.static { cursor: default; }
+.tag-chip .remove { font-weight: 700; opacity: .8; }
+
+/* ===== Main editor ===== */
+.main { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding: 16px; gap: 12px; }
+.editor-card {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.editor-head {
+  flex: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+}
+.date-nav { display: flex; align-items: center; gap: 4px; }
+.date-title { font-size: 1.15rem; font-weight: 700; min-width: 0; padding: 0 6px; }
+.today-badge { font-size: .72rem; background: var(--accent); color: #fff; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: middle; }
+.tags-bar {
+  flex: none; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2);
+}
+.tags-bar .lbl { font-size: .8rem; color: var(--muted); }
+#newTagInput {
+  padding: 3px 10px; border: 1px dashed var(--border); border-radius: 999px;
+  font-size: .82rem; width: 110px; background: transparent; color: var(--text);
+}
+#newTagInput:focus { border-style: solid; }
+#content {
+  flex: 1; min-height: 0; width: 100%; resize: none;
+  padding: 16px 20px; border: none; background: var(--surface); color: var(--text);
+  font: inherit; font-size: 1.05rem; line-height: 1.75;
+}
+#content:focus { outline: none; }
+.editor-foot {
+  flex: none; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 16px; border-top: 1px solid var(--border); font-size: .82rem; color: var(--muted);
+}
+.save-status { color: var(--success); }
+
+/* markdown 預覽 */
+#preview[hidden] { display: none; }
+#preview { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px; font-size: 1.02rem; line-height: 1.75; word-break: break-word; }
+.md > :first-child { margin-top: 0; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { margin: 1.2em 0 .5em; line-height: 1.35; }
+.md h1 { font-size: 1.6rem; border-bottom: 1px solid var(--border); padding-bottom: .25em; }
+.md h2 { font-size: 1.35rem; border-bottom: 1px solid var(--border); padding-bottom: .2em; }
+.md h3 { font-size: 1.15rem; } .md h4, .md h5, .md h6 { font-size: 1rem; }
+.md p { margin: .6em 0; }
+.md ul, .md ol { margin: .5em 0; padding-left: 1.6em; }
+.md li { margin: .2em 0; }
+.md li.task { list-style: none; margin-left: -1.3em; }
+.md li.task input { margin-right: .5em; vertical-align: -1px; }
+.md li.task.done > span { color: var(--muted); text-decoration: line-through; }
+.md blockquote { margin: .8em 0; padding: .2em 1em; border-left: 4px solid var(--accent); background: var(--surface-2); color: var(--muted); border-radius: 0 8px 8px 0; }
+.md code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; background: var(--tag-bg); padding: .1em .4em; border-radius: 4px; }
+.md pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow-x: auto; line-height: 1.5; }
+.md pre code { background: none; padding: 0; }
+.md hr { border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }
+.md a { color: var(--accent); }
+.md table { border-collapse: collapse; margin: .8em 0; display: block; overflow-x: auto; max-width: 100%; }
+.md th, .md td { border: 1px solid var(--border); padding: 6px 12px; }
+.md th { background: var(--surface-2); }
+.md .empty-md { color: var(--muted); }
+
+/* menu */
+.menu-wrap { position: relative; }
+.menu {
+  display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; min-width: 160px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 4px;
+}
+.menu.open { display: block; }
+.menu button {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 8px 12px; border: none; border-radius: 6px;
+  background: none; color: var(--text); font-size: .9rem;
+}
+.menu button:hover { background: var(--surface-2); }
+
+/* mobile tabs */
+.tabbar { display: none; }
+
+/* ===== Modal / toast / confirm ===== */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  z-index: 100; align-items: center; justify-content: center; padding: 16px;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: var(--surface); color: var(--text); border-radius: var(--radius);
+  padding: 20px; max-width: 560px; width: 100%; max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0,0,0,.25);
+}
+.modal h2 { margin: 0 0 8px; font-size: 1.2rem; }
+.modal h3 { margin: 16px 0 0; font-size: .95rem; }
+.modal label { display: block; margin: 12px 0 4px; font-weight: 500; font-size: .9rem; }
+.modal input, .modal textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  font: inherit; font-size: .95rem; background: var(--surface-2); color: var(--text);
+}
+.modal textarea { min-height: 220px; line-height: 1.6; }
+.modal .hint { color: var(--muted); font-size: .82rem; margin: 4px 0 0; }
+.modal hr { margin: 16px 0; border: none; border-top: 1px solid var(--border); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
+
+#toastContainer{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:10000;display:flex;flex-direction:column;gap:8px;width:min(92vw,420px);pointer-events:none}
+.toast{background:var(--surface);color:var(--text);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:8px;padding:12px 16px;box-shadow:0 4px 16px rgba(0,0,0,.2);white-space:pre-line;font-size:14px;line-height:1.5;pointer-events:auto;animation:toastIn .2s ease}
+.toast.success{border-left-color:var(--success)}
+.toast.error{border-left-color:var(--danger)}
+.toast.out{opacity:0;transition:opacity .3s}
+@keyframes toastIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+#confirmOverlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:10001}
+#confirmOverlay.active{display:flex}
+.confirm-box{background:var(--surface);color:var(--text);border-radius:var(--radius);padding:20px;width:min(92vw,400px);box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.confirm-box p{margin:0 0 16px;white-space:pre-line;line-height:1.6}
+.confirm-actions{display:flex;justify-content:flex-end;gap:8px}
+#storageWarning{display:flex;gap:8px;align-items:flex-start;background:#fef2f2;color:#991b1b;padding:8px 16px;font-size:.88rem;border-bottom:1px solid #fecaca}
+
+/* ===== Responsive ===== */
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar, .main { display: none; }
+  body[data-pane="review"] .sidebar { display: flex; border-right: none; }
+  .sidebar { overflow-y: auto; }
+  .entry-list { flex: none; overflow: visible; min-height: 120px; }
+  .calendar-day { height: 30px; }
+  .cal { padding: 8px 12px; }
+  .side-top { padding: 10px 12px; }
+  body[data-pane="editor"] .main { display: flex; padding: 8px; }
+  .tabbar {
+    flex: none; display: flex; background: var(--surface); border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tabbar button {
+    flex: 1; padding: 10px 0; border: none; background: none; color: var(--muted);
+    font-size: .85rem; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .tabbar button .i { width: 1.4rem; height: 1.4rem; }
+  .tabbar button.active { color: var(--accent); font-weight: 600; }
+  .topbar { padding: 0 10px; gap: 6px; }
+  .btn .txt { display: none; }
+  .btn { padding: 7px 10px; }
+  #content { font-size: 1rem; padding: 12px 14px; }
+  #preview { font-size: 1rem; padding: 12px 14px; }
+  .editor-head { padding: 8px 10px; }
+  .tags-bar { padding: 6px 10px; }
+  .date-title { font-size: .95rem; white-space: nowrap; padding: 0 2px; }
+  .today-badge { display: none !important; }
+  .editor-head { flex-wrap: nowrap; gap: 4px; }
+  .date-nav { min-width: 0; gap: 2px; }
+  #gotoTodayBtn { padding: 7px 8px; font-size: .82rem; }
+}
+</style>
+</head>
+<body data-pane="editor">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M4 4h12l4 4v12H4z"/><path d="M8 12h8M8 16h5"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.7 1.8L21.5 17.5l-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14-4L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14 4l2-2"/><path d="M20 20v-5h-5"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></symbol>
+</svg>
+<div class="app">
+  <header class="topbar">
+    <span class="brand"><svg class="i" aria-hidden="true"><use href="#i-note"/></svg> 每日工作紀錄</span>
+    <span class="spacer"></span>
+    <button class="btn" id="aiBtn" title="用 AI 整理這一天的記錄"><svg class="i" aria-hidden="true"><use href="#i-sparkle"/></svg><span class="txt">AI 整理</span></button>
+    <button class="btn" id="syncBtn" title="雙向同步 Google 試算表"><svg class="i" aria-hidden="true"><use href="#i-sync"/></svg><span class="txt">同步</span></button>
+    <div class="menu-wrap">
+      <button class="btn icon" id="moreBtn" aria-haspopup="true" aria-expanded="false" title="更多"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button>
+      <div class="menu" id="moreMenu">
+        <button id="settingsBtn"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg>設定</button>
+        <button id="exportBtn"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>匯出備份</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="warnSlot"></div>
+
+  <div class="layout">
+    <!-- 側欄：日曆 / 搜尋 / 列表 -->
+    <aside class="sidebar" id="reviewView">
+      <div class="side-top">
+        <div class="search-box"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="searchInput" placeholder="搜尋記錄內容（Ctrl/⌘+K）"></div>
+        <button class="filter-toggle" id="filterToggle" type="button"><svg class="i" aria-hidden="true"><use href="#i-chev-r"/></svg> 進階篩選</button>
+        <div class="filter-panel" id="filterPanel">
+          <div class="row">
+            <input type="date" id="dateFrom" title="開始日期">
+            <span style="color:var(--muted)">～</span>
+            <input type="date" id="dateTo" title="結束日期">
+          </div>
+          <select id="sortSelect">
+            <option value="date-desc">日期（新→舊）</option>
+            <option value="date-asc">日期（舊→新）</option>
+            <option value="length-desc">內容長度（長→短）</option>
+            <option value="length-asc">內容長度（短→長）</option>
+          </select>
+        </div>
+        <div id="tagFilters" style="margin-top:8px;"></div>
+      </div>
+      <div class="cal">
+        <div class="calendar-header">
+          <button id="prevMonth" aria-label="上個月"><svg class="i" aria-hidden="true"><use href="#i-chev-l"/></svg></button>
+          <span id="monthYear"></span>
+          <button id="nextMonth" aria-label="下個月"><svg class="i" aria-hidden="true"><use href="#i-chev-r"/></svg></button>
+        </div>
+        <div id="calendarGrid" class="calendar-grid"></div>
+      </div>
+      <div class="list-head"><span id="listCount"></span><button class="filter-toggle" id="clearFilters" type="button" style="display:none;margin:0">清除篩選</button></div>
+      <div id="entryList" class="entry-list"></div>
+    </aside>
+
+    <!-- 主區：編輯 -->
+    <main class="main" id="editorView">
+      <section class="editor-card">
+        <div class="editor-head">
+          <div class="date-nav">
+            <button class="btn icon" id="prevDay" title="前一天（Alt+←）" aria-label="前一天"><svg class="i" aria-hidden="true"><use href="#i-chev-l"/></svg></button>
+            <div class="date-title"><span id="dateDisplay"></span><span class="today-badge" id="todayBadge">今天</span></div>
+            <button class="btn icon" id="nextDay" title="後一天（Alt+→）" aria-label="後一天"><svg class="i" aria-hidden="true"><use href="#i-chev-r"/></svg></button>
+          </div>
+          <span class="spacer"></span>
+          <button class="btn" id="gotoTodayBtn" style="display:none;" title="回到今天（Alt+T）">回到今天</button>
+          <button class="btn" id="previewBtn" aria-pressed="false" title="切換 Markdown 預覽（Alt+P）"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg><span class="txt">預覽</span></button>
+        </div>
+        <div class="tags-bar">
+          <span class="lbl">標籤</span>
+          <span id="currentTags" style="display:contents"></span>
+          <input type="text" id="newTagInput" placeholder="＋ 新增標籤" maxlength="20">
+          <span id="allTagsList" style="display:contents"></span>
+        </div>
+        <div id="preview" class="md" hidden tabindex="0" title="雙擊回到編輯"></div>
+        <textarea id="content" placeholder="今天做了什麼？直接開始書寫，內容會自動儲存..."></textarea>
+        <div class="editor-foot">
+          <span class="save-status" id="saveStatus">已自動儲存</span>
+          <span id="charCount">0 字</span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <nav class="tabbar" aria-label="切換檢視">
+    <button id="btnEditor" class="active"><svg class="i" aria-hidden="true"><use href="#i-edit"/></svg>記錄</button>
+    <button id="btnReview"><svg class="i" aria-hidden="true"><use href="#i-calendar"/></svg>回顧</button>
+  </nav>
+</div>
+
+<!-- 設定 Modal -->
+<div id="settingsModal" class="modal-overlay">
+  <div class="modal">
+    <h2>設定</h2>
+    <h3>AI 整理（BYOK）</h3>
+    <p class="hint">支援 OpenAI 相容 API（OpenAI、Groq、DeepSeek 等）。金鑰僅存在本機。</p>
+    <label for="apiKey">API Key</label>
+    <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off">
+    <label for="apiBase">API Base URL</label>
+    <input type="text" id="apiBase" placeholder="https://api.openai.com/v1">
+    <label for="model">模型名稱</label>
+    <input type="text" id="model" placeholder="gpt-4o-mini">
+    <hr>
+    <h3 style="margin-top:0">Google 試算表同步</h3>
+    <label for="sheetUrl">Apps Script 網址</label>
+    <input type="text" id="sheetUrl" placeholder="https://script.google.com/macros/s/.../exec">
+    <p class="hint">部署 Apps Script 後貼上「網頁應用程式」網址。設定後離開輸入框會自動同步當天記錄。</p>
+    <hr>
+    <button id="clearLocalBtn" class="btn danger" style="width:100%;justify-content:center;">清除所有本地記錄</button>
+    <p class="hint">此操作無法復原，建議先匯出備份。不會影響 Google 試算表。</p>
+    <div class="modal-actions">
+      <button id="closeSettingsBtn" class="btn">關閉</button>
+      <button id="saveSettingsBtn" class="btn primary">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI 結果 Modal -->
+<div id="aiModal" class="modal-overlay">
+  <div class="modal">
+    <h2>AI 整理結果</h2>
+    <textarea id="aiResult" readonly></textarea>
+    <div class="modal-actions">
+      <button id="closeAiBtn" class="btn">關閉</button>
+      <button id="applyAppendBtn" class="btn">附加到結尾</button>
+      <button id="applyReplaceBtn" class="btn primary">取代原文</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastContainer" aria-live="polite"></div>
+<div id="confirmOverlay"><div class="confirm-box" role="dialog" aria-modal="true"><p id="confirmMsg"></p><div class="confirm-actions"><button class="btn" id="confirmCancel">取消</button><button id="confirmOk" class="btn danger">確定</button></div></div></div>
+
+<script>
+function showToast(msg, type) {
+  type = type || (/失敗|請先|還沒|錯誤/.test(msg) ? 'error' : /完成|已/.test(msg) ? 'success' : '');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toastContainer').appendChild(el);
+  const ms = Math.min(10000, 3000 + msg.length * 60);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, ms);
+  el.onclick = () => el.remove();
+}
+function showConfirm(msg) {
+  return new Promise(resolve => {
+    const ov = document.getElementById('confirmOverlay');
+    document.getElementById('confirmMsg').textContent = msg;
+    ov.classList.add('active');
+    const done = v => { ov.classList.remove('active'); resolve(v); };
+    document.getElementById('confirmOk').onclick = () => done(true);
+    document.getElementById('confirmCancel').onclick = () => done(false);
+  });
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+<script>
+// ========== 資料層 ==========
+const STORAGE_KEY = 'dailyWorkLog_v1';
+
+function getLocalDateString(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatDisplayDate(dateStr) {
+  if (!dateStr) return '（無日期）';
+  let d;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) d = new Date(dateStr + 'T00:00:00');
+  else d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 星期${weekdays[d.getDay()]}`;
+}
+
+function shiftDate(dateStr, delta) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + delta);
+  return getLocalDateString(d);
+}
+
+// 把各種日期字串正規化成 YYYY-MM-DD
+function normalizeDateKey(dateStr) {
+  if (!dateStr) return '';
+  dateStr = String(dateStr).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const year = parseInt(dateStr.substring(0, 4), 10);
+    if (year < 2020 || year > 2100) return new Date().getFullYear() + dateStr.substring(4);
+    return dateStr;
+  }
+  const cnMatch = dateStr.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (cnMatch) {
+    return `${cnMatch[1]}-${String(cnMatch[2]).padStart(2, '0')}-${String(cnMatch[3]).padStart(2, '0')}`;
+  }
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  let year = d.getFullYear();
+  if (year < 2020 || year > 2100) year = new Date().getFullYear();
+  return `${year}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function fixBadYearsInData() {
+  const fixed = {};
+  let changed = false;
+  Object.keys(appData.entries).forEach(key => {
+    const newKey = normalizeDateKey(key);
+    if (newKey && newKey !== key) { fixed[newKey] = appData.entries[key]; changed = true; }
+    else if (newKey) fixed[newKey] = appData.entries[key];
+  });
+  if (changed) { appData.entries = fixed; saveData(appData); }
+}
+
+function isStorageAvailable() {
+  if (window._storageChecked) return window._storageAvailable;
+  window._storageChecked = true;
+  try {
+    localStorage.setItem('__storage_test__', '1');
+    localStorage.removeItem('__storage_test__');
+    window._storageAvailable = true;
+  } catch (e) {
+    window._storageAvailable = false;
+    window._storageDisabled = true;
+  }
+  return window._storageAvailable;
+}
+
+function loadData() {
+  const defaultData = {
+    entries: {},
+    settings: { apiKey: '', apiBase: 'https://api.openai.com/v1', model: 'gpt-4o-mini', sheetUrl: '' }
+  };
+  if (!isStorageAvailable()) return defaultData;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultData;
+    const data = JSON.parse(raw);
+    if (!data.entries) data.entries = {};
+    if (!data.settings) data.settings = defaultData.settings;
+    if (!data.settings.sheetUrl) data.settings.sheetUrl = '';
+    return data;
+  } catch (e) {
+    window._storageDisabled = true;
+    return defaultData;
+  }
+}
+
+function saveData(data) {
+  if (!isStorageAvailable() || window._storageDisabled) return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    window._storageDisabled = true;
+    showStorageWarning();
+  }
+}
+
+let appData = loadData();
+let currentDate = getLocalDateString();
+let reviewYear = new Date().getFullYear();
+let reviewMonth = new Date().getMonth();
+let selectedFilterTags = new Set();
+
+// ========== UI 元素 ==========
+const $ = id => document.getElementById(id);
+const contentEl = $('content');
+const dateDisplay = $('dateDisplay');
+const saveStatus = $('saveStatus');
+const currentTagsEl = $('currentTags');
+const allTagsListEl = $('allTagsList');
+const newTagInput = $('newTagInput');
+const btnEditor = $('btnEditor');
+const btnReview = $('btnReview');
+const calendarGrid = $('calendarGrid');
+const monthYearEl = $('monthYear');
+const entryList = $('entryList');
+const searchInput = $('searchInput');
+const tagFiltersEl = $('tagFilters');
+const gotoTodayBtn = $('gotoTodayBtn');
+
+// ========== 核心功能 ==========
+function getEntry(date) {
+  return appData.entries[date] || { content: '', tags: [] };
+}
+
+function setEntry(date, entry) {
+  if (!entry.content.trim() && (!entry.tags || entry.tags.length === 0)) delete appData.entries[date];
+  else appData.entries[date] = entry;
+  saveData(appData);
+}
+
+function collectAllTags() {
+  const tags = new Set();
+  Object.values(appData.entries).forEach(e => (e.tags || []).forEach(t => tags.add(t)));
+  return Array.from(tags).sort();
+}
+
+function updateCharCount() {
+  const n = contentEl.value.replace(/\s/g, '').length;
+  $('charCount').textContent = `${n} 字`;
+}
+
+function loadEditor(date, opts = {}) {
+  flushSave();
+  currentDate = date;
+  const entry = getEntry(date);
+  contentEl.value = entry.content || '';
+  const isToday = date === getLocalDateString();
+  dateDisplay.textContent = formatDisplayDate(date);
+  $('todayBadge').style.display = isToday ? 'inline' : 'none';
+  gotoTodayBtn.style.display = isToday ? 'none' : 'inline-flex';
+  // 日曆跟著當前日期的月份
+  const d = new Date(date + 'T00:00:00');
+  if (!isNaN(d)) { reviewYear = d.getFullYear(); reviewMonth = d.getMonth(); }
+  renderCurrentTags();
+  renderAllTags();
+  renderCalendar();
+  renderEntryList();
+  updateCharCount();
+  updateSaveStatus(true);
+  if (previewMode) renderPreview();
+  else if (opts.focus !== false && window.innerWidth > 900) contentEl.focus();
+}
+
+function renderCurrentTags() {
+  const entry = getEntry(currentDate);
+  currentTagsEl.innerHTML = '';
+  (entry.tags || []).forEach(tag => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip selected';
+    chip.title = '點擊移除';
+    chip.innerHTML = `${esc(tag)} <span class="remove">×</span>`;
+    chip.onclick = () => removeTagFromCurrent(tag);
+    currentTagsEl.appendChild(chip);
+  });
+}
+
+function renderAllTags() {
+  const entry = getEntry(currentDate);
+  const candidates = collectAllTags().filter(t => !(entry.tags || []).includes(t));
+  allTagsListEl.innerHTML = '';
+  candidates.forEach(tag => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.style.opacity = '.75';
+    chip.title = '點擊加入此標籤';
+    chip.textContent = '+ ' + tag;
+    chip.onclick = () => addTagToCurrent(tag);
+    allTagsListEl.appendChild(chip);
+  });
+}
+
+function refreshAfterTagChange() {
+  renderCurrentTags();
+  renderAllTags();
+  renderCalendar();
+  renderTagFilters();
+  renderEntryList();
+}
+
+function addTagToCurrent(tag) {
+  tag = tag.trim();
+  if (!tag) return;
+  const entry = getEntry(currentDate);
+  entry.content = contentEl.value;
+  if (!entry.tags) entry.tags = [];
+  if (!entry.tags.includes(tag)) {
+    entry.tags.push(tag);
+    setEntry(currentDate, entry);
+    refreshAfterTagChange();
+  }
+  newTagInput.value = '';
+}
+
+function removeTagFromCurrent(tag) {
+  const entry = getEntry(currentDate);
+  entry.content = contentEl.value;
+  entry.tags = (entry.tags || []).filter(t => t !== tag);
+  setEntry(currentDate, entry);
+  refreshAfterTagChange();
+}
+
+let saveTimer = null;
+function doSave() {
+  const entry = getEntry(currentDate);
+  entry.content = contentEl.value;
+  setEntry(currentDate, entry);
+  updateSaveStatus(true);
+  renderCalendar();
+  renderEntryList();
+}
+function autoSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { saveTimer = null; doSave(); }, 400);
+}
+function flushSave() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; doSave(); }
+}
+
+function updateSaveStatus(saved) {
+  if (window._storageDisabled) {
+    saveStatus.textContent = '暫存模式（無法永久儲存，請用「匯出」備份）';
+    saveStatus.style.color = 'var(--danger)';
+    return;
+  }
+  saveStatus.textContent = saved ? '已自動儲存' : '儲存中...';
+  saveStatus.style.color = saved ? 'var(--success)' : 'var(--muted)';
+}
+
+function showStorageWarning() {
+  if ($('storageWarning')) return;
+  const warn = document.createElement('div');
+  warn.id = 'storageWarning';
+  warn.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><span></span>';
+  warn.lastChild.textContent = '目前環境無法使用本機儲存（沙盒限制）。資料僅暫存在記憶體中，關閉頁面即消失。請使用「匯出備份」定期儲存，或將此檔案下載後用瀏覽器直接開啟。';
+  $('warnSlot').appendChild(warn);
+}
+
+// ========== 檢視切換（手機） ==========
+function switchMode(mode) {
+  document.body.dataset.pane = mode;
+  btnEditor.classList.toggle('active', mode === 'editor');
+  btnReview.classList.toggle('active', mode === 'review');
+  if (mode === 'review') { renderCalendar(); renderEntryList(); renderTagFilters(); }
+}
+
+// ========== 日曆 / 列表 ==========
+function renderCalendar() {
+  const year = reviewYear, month = reviewMonth;
+  monthYearEl.textContent = `${year}年${month + 1}月`;
+  calendarGrid.innerHTML = '';
+  ['日', '一', '二', '三', '四', '五', '六'].forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'day-name';
+    el.textContent = n;
+    calendarGrid.appendChild(el);
+  });
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  for (let i = 0; i < firstDay; i++) calendarGrid.appendChild(document.createElement('div'));
+  const todayStr = getLocalDateString();
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const cell = document.createElement('div');
+    cell.className = 'calendar-day';
+    cell.textContent = d;
+    if (dateStr === todayStr) cell.classList.add('today');
+    if (appData.entries[dateStr]) cell.classList.add('has-entry');
+    if (dateStr === currentDate) cell.classList.add('selected');
+    cell.onclick = () => { loadEditor(dateStr); switchMode('editor'); };
+    calendarGrid.appendChild(cell);
+  }
+}
+
+function renderTagFilters() {
+  const all = collectAllTags();
+  tagFiltersEl.innerHTML = '';
+  // 清除已不存在的篩選標籤
+  [...selectedFilterTags].forEach(t => { if (!all.includes(t)) selectedFilterTags.delete(t); });
+  all.forEach(tag => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip' + (selectedFilterTags.has(tag) ? ' selected' : '');
+    chip.textContent = tag;
+    chip.onclick = () => {
+      if (selectedFilterTags.has(tag)) selectedFilterTags.delete(tag);
+      else selectedFilterTags.add(tag);
+      renderTagFilters();
+      renderEntryList();
+    };
+    tagFiltersEl.appendChild(chip);
+  });
+}
+
+function hasActiveFilter() {
+  return !!(searchInput.value.trim() || $('dateFrom').value || $('dateTo').value || selectedFilterTags.size);
+}
+
+function renderEntryList() {
+  const search = (searchInput.value || '').trim().toLowerCase();
+  const dateFrom = $('dateFrom').value;
+  const dateTo = $('dateTo').value;
+  const sortBy = $('sortSelect').value;
+
+  let dates = Object.keys(appData.entries).filter(date => {
+    if (dateFrom && date < dateFrom) return false;
+    if (dateTo && date > dateTo) return false;
+    const entry = appData.entries[date];
+    if (selectedFilterTags.size > 0 && !(entry.tags || []).some(t => selectedFilterTags.has(t))) return false;
+    if (search && !(entry.content || '').toLowerCase().includes(search) &&
+        !(entry.tags || []).some(t => t.toLowerCase().includes(search))) return false;
+    return true;
+  });
+
+  dates.sort((a, b) => {
+    const ea = appData.entries[a], eb = appData.entries[b];
+    switch (sortBy) {
+      case 'date-asc': return a.localeCompare(b);
+      case 'length-asc': return (ea.content || '').length - (eb.content || '').length;
+      case 'length-desc': return (eb.content || '').length - (ea.content || '').length;
+      default: return b.localeCompare(a);
+    }
+  });
+
+  $('listCount').textContent = `共 ${dates.length} 筆記錄`;
+  $('clearFilters').style.display = hasActiveFilter() ? 'inline' : 'none';
+
+  entryList.innerHTML = '';
+  if (dates.length === 0) {
+    entryList.innerHTML = '<div class="empty">沒有符合條件的記錄</div>';
+    return;
+  }
+  dates.forEach(date => {
+    const entry = appData.entries[date];
+    const tags = entry.tags || [];
+    const item = document.createElement('div');
+    item.className = 'entry-item' + (date === currentDate ? ' current' : '');
+    item.innerHTML = `
+      <div class="entry-date">${esc(formatDisplayDate(date))}</div>
+      <div class="entry-preview">${esc((entry.content || '').slice(0, 160)) || '（無內容）'}</div>
+      ${tags.length ? `<div class="entry-tags">${tags.map(t => `<span class="tag-chip static">${esc(t)}</span>`).join('')}</div>` : ''}
+    `;
+    item.onclick = () => { loadEditor(date); switchMode('editor'); };
+    entryList.appendChild(item);
+  });
+}
+
+// ========== AI 功能 ==========
+async function aiSummarize() {
+  const settings = appData.settings;
+  if (!settings.apiKey) {
+    showToast('請先到「設定」填入您的 API Key。');
+    openSettings();
+    return;
+  }
+  const text = contentEl.value.trim();
+  if (!text) { showToast('這一天還沒有內容可以整理。'); return; }
+  const btn = $('aiBtn');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<svg class="i spin" aria-hidden="true"><use href="#i-loader"/></svg><span class="txt">整理中...</span>';
+  try {
+    const prompt = `請將以下每日工作記錄整理成簡潔、有條理的繁體中文摘要。使用條列式重點，保留重要細節、成果與待辦事項。不要添加額外評論。\n\n記錄內容：\n${text}`;
+    const res = await fetch(`${settings.apiBase.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.apiKey}` },
+      body: JSON.stringify({
+        model: settings.model || 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        max_tokens: 1000
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    $('aiResult').value = data.choices?.[0]?.message?.content || '無法取得結果';
+    $('aiModal').classList.add('active');
+  } catch (e) {
+    showToast('AI 請求失敗：' + e.message + '\n請檢查 API Key、Base URL 與模型名稱是否正確。');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+// ========== 同步 ==========
+async function autoSyncToSheet() {
+  const url = (appData.settings.sheetUrl || '').trim();
+  if (!url) return;
+  const entry = getEntry(currentDate);
+  const content = contentEl.value.trim();
+  const tags = entry.tags || [];
+  if (!content && tags.length === 0) return;
+  if (window._syncing) return;
+  window._syncing = true;
+  try {
+    await fetch(url, {
+      method: 'POST', mode: 'cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'save', date: currentDate, content, tags })
+    });
+    saveStatus.textContent = '已自動儲存並同步';
+    saveStatus.style.color = 'var(--success)';
+    setTimeout(() => { if (saveStatus.textContent === '已自動儲存並同步') updateSaveStatus(true); }, 2000);
+  } catch (e) {
+    saveStatus.textContent = '同步失敗（已本機儲存）';
+    saveStatus.style.color = 'var(--danger)';
+  } finally {
+    window._syncing = false;
+  }
+}
+
+$('syncBtn').onclick = async () => {
+  const url = (appData.settings.sheetUrl || '').trim();
+  if (!url) {
+    showToast('請先到「設定」填入 Google 試算表 Apps Script 網址。');
+    openSettings();
+    return;
+  }
+  flushSave();
+  const btn = $('syncBtn');
+  btn.disabled = true;
+  try {
+    const content = contentEl.value.trim();
+    const tags = getEntry(currentDate).tags || [];
+    let pushed = false;
+    if (content || tags.length) {
+      await fetch(url, {
+        method: 'POST', mode: 'cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'save', date: currentDate, content, tags })
+      });
+      pushed = true;
+    }
+    const res = await fetch(url + (url.includes('?') ? '&' : '?') + 'action=getAll');
+    const json = await res.json();
+    let list = json.entries || json.data || json;
+    if (!Array.isArray(list)) list = Object.keys(list).map(d => ({ date: d, ...list[d] }));
+    let merged = 0;
+    list.forEach(r => {
+      if (!r || !r.date) return;
+      const date = String(r.date).slice(0, 10);
+      const rc = String(r.content || '').trim();
+      const rt = Array.isArray(r.tags) ? r.tags : String(r.tags || '').split(/[,，]/).map(t => t.trim()).filter(Boolean);
+      const local = appData.entries[date];
+      if (!local || (!local.content && rc)) {
+        setEntry(date, { content: rc, tags: rt });
+        merged++;
+      }
+    });
+    saveData(appData);
+    loadEditor(currentDate, { focus: false });
+    renderTagFilters();
+    showToast(`雙向同步完成！\n${pushed ? '已上傳這一天的記錄' : '這一天無內容，未上傳'}，並從試算表合併 ${merged} 筆資料。`, 'success');
+  } catch (e) {
+    showToast('同步失敗：' + e.message + '\n請確認：\n1. Apps Script 已更新並重新部署\n2. 網址正確\n3. 部署權限為「任何人」', 'error');
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// ========== 設定 ==========
+function openSettings() {
+  $('apiKey').value = appData.settings.apiKey || '';
+  $('apiBase').value = appData.settings.apiBase || 'https://api.openai.com/v1';
+  $('model').value = appData.settings.model || 'gpt-4o-mini';
+  $('sheetUrl').value = appData.settings.sheetUrl || '';
+  $('settingsModal').classList.add('active');
+}
+
+// ========== Markdown 預覽 ==========
+function mdInline(t) {
+  const codes = [];
+  t = t.replace(/`([^`]+)`/g, (m, c) => { codes.push(c); return '\u0000' + (codes.length - 1) + '\u0000'; });
+  t = esc(t);
+  t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  t = t.replace(/\*\*(.+?)\*\*|__(.+?)__/g, (m, a, b) => '<strong>' + (a || b) + '</strong>');
+  t = t.replace(/\*(?!\s)(.+?)\*/g, '<em>$1</em>');
+  t = t.replace(/~~(.+?)~~/g, '<del>$1</del>');
+  return t.replace(/\u0000(\d+)\u0000/g, (m, i) => '<code>' + esc(codes[i]) + '</code>');
+}
+
+function renderMarkdown(src) {
+  const lines = String(src).replace(/\r\n?/g, '\n').split('\n');
+  const listRe = /^(\s*)([-*+]|\d+\.)\s+(.*)$/;
+  const tableSep = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+  const cells = l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+  let out = '', i = 0, para = [];
+  const flushPara = () => { if (para.length) { out += '<p>' + para.map(mdInline).join('<br>') + '</p>'; para = []; } };
+  while (i < lines.length) {
+    const line = lines[i];
+    let m;
+    if (/^\s*```/.test(line)) {                       // 程式碼區塊
+      flushPara();
+      const buf = []; i++;
+      while (i < lines.length && !/^\s*```/.test(lines[i])) buf.push(lines[i++]);
+      i++;
+      out += '<pre><code>' + esc(buf.join('\n')) + '</code></pre>';
+    } else if (!line.trim()) { flushPara(); i++; }
+    else if ((m = line.match(/^(#{1,6})\s+(.*)$/))) { flushPara(); out += `<h${m[1].length}>${mdInline(m[2])}</h${m[1].length}>`; i++; }
+    else if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { flushPara(); out += '<hr>'; i++; }
+    else if (/^\s*>/.test(line)) {                     // 引用
+      flushPara();
+      const buf = [];
+      while (i < lines.length && /^\s*>/.test(lines[i])) buf.push(lines[i++].replace(/^\s*>\s?/, ''));
+      out += '<blockquote>' + renderMarkdown(buf.join('\n')) + '</blockquote>';
+    } else if (line.includes('|') && i + 1 < lines.length && tableSep.test(lines[i + 1]) && lines[i + 1].includes('-')) { // 表格
+      flushPara();
+      const head = cells(line); i += 2;
+      let rows = '';
+      while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
+        rows += '<tr>' + cells(lines[i++]).map(c => '<td>' + mdInline(c) + '</td>').join('') + '</tr>';
+      }
+      out += '<table><thead><tr>' + head.map(c => '<th>' + mdInline(c) + '</th>').join('') + '</tr></thead><tbody>' + rows + '</tbody></table>';
+    } else if ((m = line.match(listRe))) {              // 清單（支援縮排巢狀與待辦）
+      flushPara();
+      const stack = [];
+      let html = '';
+      while (i < lines.length && (m = lines[i].match(listRe))) {
+        const indent = m[1].replace(/\t/g, '    ').length;
+        const tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+        let body = m[3], cls = '';
+        const t = body.match(/^\[( |x|X)\]\s+(.*)$/);
+        if (t) { const done = t[1] !== ' '; cls = ' class="task' + (done ? ' done' : '') + '"'; body = `<input type="checkbox" disabled${done ? ' checked' : ''}><span>${mdInline(t[2])}</span>`; }
+        else body = mdInline(body);
+        if (!stack.length || indent > stack[stack.length - 1].indent) { stack.push({ indent, tag }); html += `<${tag}><li${cls}>`; }
+        else {
+          while (stack.length > 1 && indent < stack[stack.length - 1].indent) { html += `</li></${stack.pop().tag}>`; }
+          html += `</li><li${cls}>`;
+        }
+        html += body; i++;
+      }
+      while (stack.length) html += `</li></${stack.pop().tag}>`;
+      out += html;
+    } else { para.push(line); i++; }
+  }
+  flushPara();
+  return out;
+}
+
+let previewMode = false;
+function renderPreview() {
+  const el = $('preview');
+  const src = contentEl.value;
+  el.innerHTML = src.trim() ? renderMarkdown(src) : '<p class="empty-md">（沒有內容）</p>';
+}
+function setPreview(on) {
+  if (on) flushSave();
+  previewMode = on;
+  if (on) renderPreview();
+  $('preview').hidden = !on;
+  contentEl.hidden = on;
+  const btn = $('previewBtn');
+  btn.setAttribute('aria-pressed', on);
+  btn.classList.toggle('primary', on);
+  btn.innerHTML = `<svg class="i" aria-hidden="true"><use href="#${on ? 'i-edit' : 'i-eye'}"/></svg><span class="txt">${on ? '編輯' : '預覽'}</span>`;
+  btn.title = (on ? '回到編輯' : '切換 Markdown 預覽') + '（Alt+P）';
+  if (!on && window.innerWidth > 900) contentEl.focus();
+}
+$('previewBtn').onclick = () => setPreview(!previewMode);
+$('preview').addEventListener('dblclick', () => { if (!window.getSelection().toString()) setPreview(false); });
+
+// ========== 事件綁定 ==========
+contentEl.addEventListener('input', () => {
+  updateSaveStatus(false);
+  updateCharCount();
+  autoSave();
+});
+contentEl.addEventListener('blur', () => { flushSave(); autoSyncToSheet(); });
+window.addEventListener('beforeunload', flushSave);
+
+newTagInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addTagToCurrent(newTagInput.value); }
+});
+newTagInput.addEventListener('blur', () => { if (newTagInput.value.trim()) addTagToCurrent(newTagInput.value); });
+
+btnEditor.onclick = () => switchMode('editor');
+btnReview.onclick = () => switchMode('review');
+
+$('prevDay').onclick = () => loadEditor(shiftDate(currentDate, -1));
+$('nextDay').onclick = () => loadEditor(shiftDate(currentDate, 1));
+gotoTodayBtn.onclick = () => loadEditor(getLocalDateString());
+
+$('prevMonth').onclick = () => {
+  reviewMonth--;
+  if (reviewMonth < 0) { reviewMonth = 11; reviewYear--; }
+  renderCalendar();
+};
+$('nextMonth').onclick = () => {
+  reviewMonth++;
+  if (reviewMonth > 11) { reviewMonth = 0; reviewYear++; }
+  renderCalendar();
+};
+
+searchInput.addEventListener('input', renderEntryList);
+$('dateFrom').addEventListener('change', renderEntryList);
+$('dateTo').addEventListener('change', renderEntryList);
+$('sortSelect').addEventListener('change', renderEntryList);
+$('filterToggle').onclick = () => {
+  const open = $('filterPanel').classList.toggle('open');
+  $('filterToggle').classList.toggle('open', open);
+};
+$('clearFilters').onclick = () => {
+  searchInput.value = ''; $('dateFrom').value = ''; $('dateTo').value = '';
+  selectedFilterTags.clear();
+  renderTagFilters(); renderEntryList();
+};
+
+$('aiBtn').onclick = aiSummarize;
+
+// 更多選單
+const moreBtn = $('moreBtn'), moreMenu = $('moreMenu');
+moreBtn.onclick = e => {
+  e.stopPropagation();
+  const open = moreMenu.classList.toggle('open');
+  moreBtn.setAttribute('aria-expanded', open);
+};
+document.addEventListener('click', () => { moreMenu.classList.remove('open'); moreBtn.setAttribute('aria-expanded', false); });
+
+$('settingsBtn').onclick = openSettings;
+$('saveSettingsBtn').onclick = () => {
+  appData.settings.apiKey = $('apiKey').value.trim();
+  appData.settings.apiBase = $('apiBase').value.trim() || 'https://api.openai.com/v1';
+  appData.settings.model = $('model').value.trim() || 'gpt-4o-mini';
+  appData.settings.sheetUrl = $('sheetUrl').value.trim();
+  saveData(appData);
+  $('settingsModal').classList.remove('active');
+  showToast('設定已儲存');
+};
+$('closeSettingsBtn').onclick = () => $('settingsModal').classList.remove('active');
+
+$('clearLocalBtn').onclick = async () => {
+  if (!await showConfirm('確定要清除所有本地記錄嗎？\n此操作無法復原（Google 試算表的資料不會被刪除）。\n建議先按「匯出備份」。')) return;
+  if (!await showConfirm('再次確認：真的要刪除所有本地記錄？')) return;
+  clearTimeout(saveTimer); saveTimer = null;
+  appData.entries = {};
+  saveData(appData);
+  loadEditor(getLocalDateString(), { focus: false });
+  renderTagFilters();
+  $('settingsModal').classList.remove('active');
+  showToast('已清除所有本地記錄。');
+};
+
+$('applyReplaceBtn').onclick = () => {
+  contentEl.value = $('aiResult').value;
+  updateCharCount(); autoSave(); if (previewMode) renderPreview();
+  $('aiModal').classList.remove('active');
+};
+$('applyAppendBtn').onclick = () => {
+  const current = contentEl.value.trim();
+  const summary = $('aiResult').value;
+  contentEl.value = current ? current + '\n\n--- AI 整理 ---\n' + summary : summary;
+  updateCharCount(); autoSave(); if (previewMode) renderPreview();
+  $('aiModal').classList.remove('active');
+};
+$('closeAiBtn').onclick = () => $('aiModal').classList.remove('active');
+
+$('exportBtn').onclick = () => {
+  flushSave();
+  const blob = new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `每日工作紀錄備份_${getLocalDateString()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.onclick = e => { if (e.target === overlay) overlay.classList.remove('active'); };
+});
+
+// 快捷鍵
+document.addEventListener('keydown', e => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    if (window.innerWidth <= 900) switchMode('review');
+    searchInput.focus(); searchInput.select();
+  } else if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay.active').forEach(m => m.classList.remove('active'));
+    moreMenu.classList.remove('open');
+  } else if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); loadEditor(shiftDate(currentDate, -1)); }
+  else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); loadEditor(shiftDate(currentDate, 1)); }
+  else if (e.altKey && e.code === 'KeyP') { e.preventDefault(); setPreview(!previewMode); }
+  else if (e.altKey && e.code === 'KeyT') { e.preventDefault(); loadEditor(getLocalDateString()); }
+});
+
+// ========== 初始化 ==========
+appData = loadData();
+fixBadYearsInData();
+if (window._storageDisabled) showStorageWarning();
+renderTagFilters();
+loadEditor(currentDate);
+</script>
+</body>
+</html>
