@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>每日工作紀錄</title>
 <meta name="theme-color" content="#4f46e5">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,6 +20,7 @@
 5. 資料僅存在本機 localStorage；可隨時匯出 JSON 備份。
 -->
 <style>
+html { touch-action: manipulation; }
 :root {
   color-scheme: light dark;
   --bg: #f4f6fa;
@@ -660,6 +661,8 @@ function doPost(e) {
 <div id="confirmOverlay"><div class="confirm-box" role="dialog" aria-modal="true"><p id="confirmMsg"></p><div class="confirm-actions"><button class="btn" id="confirmCancel">取消</button><button id="confirmOk" class="btn danger">確定</button></div></div></div>
 
 <script>
+// 禁止雙指縮放（iOS Safari 會忽略 viewport 的 user-scalable=no，需另外攔截）
+['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
 function showToast(msg, type) {
   type = type || (/失敗|請先|還沒|錯誤/.test(msg) ? 'error' : /完成|已/.test(msg) ? 'success' : '');
   const el = document.createElement('div');
