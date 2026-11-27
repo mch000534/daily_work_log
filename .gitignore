@@ -1,0 +1,6 @@
+# WorkBuddy 工作區資料（本機專案紀錄，不進版本庫）
+.workbuddy/
+
+# 作業系統產生的檔案
+.DS_Store
+Thumbs.db

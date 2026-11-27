@@ -5,6 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>每日工作紀錄</title>
 <meta name="theme-color" content="#4f46e5">
+<script>
+/* 盡早套用主題，避免載入時閃爍；主程式的 STORAGE_KEY 沿用同一個值 */
+(function () {
+  window.__DWL_STORAGE_KEY = 'dailyWorkLog_v1';
+  var pref = 'system';
+  try {
+    var raw = localStorage.getItem(window.__DWL_STORAGE_KEY);
+    if (raw) {
+      var d = JSON.parse(raw);
+      pref = (d && d.settings && d.settings.theme) || 'system';
+    }
+  } catch (e) { pref = 'system'; }
+  if (pref !== 'light' && pref !== 'dark') pref = 'system';
+  var dark = pref === 'dark' ||
+    (pref === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+})();
+</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="工作紀錄">
@@ -17,12 +35,14 @@
 2. 右側為編輯區，內容自動儲存到本機瀏覽器；左側可用日曆、搜尋、標籤快速找到過往記錄。
 3. 快捷鍵：Ctrl/⌘+K 搜尋、Alt+← / Alt+→ 前後一天、Alt+T 回到今天、Alt+P 切換 Markdown 預覽。
 4. 「設定」可填入 LLM API Key（OpenAI 相容）與 Google 試算表同步網址（設定內附「Google 試算表設定教學」與可複製的程式碼）。
-5. 資料僅存在本機 localStorage；可隨時匯出 JSON 備份。
+5. 資料僅存在本機 localStorage；可隨時匯出／匯入 JSON 備份（備份不含 API Key 與同步密碼）。
+6. 「回顧」側欄可展開本週／本月統計並用 AI 產生回顧報告；Markdown 預覽中的待辦方塊可直接勾選並回存。
+7. 「設定 → 外觀」可切換跟隨系統／淺色／深色；「更多」可匯出當天 Markdown、匯出／匯入 JSON 備份與查看回收桶、衝突版本。
 -->
 <style>
 html { touch-action: manipulation; }
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #f4f6fa;
   --surface: #ffffff;
   --surface-2: #f8fafc;
@@ -40,13 +60,13 @@ html { touch-action: manipulation; }
   --shadow: 0 1px 3px rgba(15,23,42,.08);
   --topbar-h: 56px;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f172a; --surface: #1e293b; --surface-2: #172033;
-    --text: #e2e8f0; --muted: #94a3b8; --accent: #5b8def; --accent-hover: #7aa2f7;
-    --accent-soft: #24365e; --border: #334155; --tag-bg: #2a3350; --tag-text: #c7d2fe;
-    --shadow: 0 1px 3px rgba(0,0,0,.4);
-  }
+/* 深色由 JS 依「跟隨系統／淺色／深色」設定 data-theme，不再直接綁系統 */
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f172a; --surface: #1e293b; --surface-2: #172033;
+  --text: #e2e8f0; --muted: #94a3b8; --accent: #5b8def; --accent-hover: #7aa2f7;
+  --accent-soft: #24365e; --border: #334155; --tag-bg: #2a3350; --tag-text: #c7d2fe;
+  --shadow: 0 1px 3px rgba(0,0,0,.4);
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -226,7 +246,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .md ul, .md ol { margin: .5em 0; padding-left: 1.6em; }
 .md li { margin: .2em 0; }
 .md li.task { list-style: none; margin-left: -1.3em; }
-.md li.task input { margin-right: .5em; vertical-align: -1px; }
+.md li.task input { margin-right: .5em; vertical-align: -1px; cursor: pointer; }
 .md li.task.done > span { color: var(--muted); text-decoration: line-through; }
 .md blockquote { margin: .8em 0; padding: .2em 1em; border-left: 4px solid var(--accent); background: var(--surface-2); color: var(--muted); border-radius: 0 8px 8px 0; }
 .md code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; background: var(--tag-bg); padding: .1em .4em; border-radius: 4px; }
@@ -270,7 +290,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .modal h2 { margin: 0 0 8px; font-size: 1.2rem; }
 .modal h3 { margin: 16px 0 0; font-size: .95rem; }
 .modal label { display: block; margin: 12px 0 4px; font-weight: 500; font-size: .9rem; }
-.modal input, .modal textarea {
+.modal input, .modal select, .modal textarea {
   width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
   font: inherit; font-size: .95rem; background: var(--surface-2); color: var(--text);
 }
@@ -292,7 +312,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .confirm-box{background:var(--surface);color:var(--text);border-radius:var(--radius);padding:20px;width:min(92vw,400px);box-shadow:0 8px 32px rgba(0,0,0,.3)}
 .confirm-box p{margin:0 0 16px;white-space:pre-line;line-height:1.6}
 .confirm-actions{display:flex;justify-content:flex-end;gap:8px}
-#storageWarning{display:flex;gap:8px;align-items:flex-start;background:#fef2f2;color:#991b1b;padding:8px 16px;font-size:.88rem;border-bottom:1px solid #fecaca}
+#storageWarning{display:flex;gap:8px;align-items:flex-start;background:var(--surface-2);color:var(--text);padding:8px 16px;font-size:.88rem;border-bottom:1px solid var(--border);border-left:3px solid var(--danger)}
+#storageWarning[data-kind="capacity"]{border-left-color:#d97706}
+#storageWarning .i{flex:none;margin-top:2px}
+.trash-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.trash-item{display:flex;align-items:flex-start;gap:10px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;flex-wrap:wrap}
+.trash-item .meta{flex:1;min-width:160px}
+.trash-item .date{font-weight:500;font-size:.9rem}
+.trash-item .preview{color:var(--muted);font-size:.82rem;margin-top:2px;word-break:break-word}
+.trash-item .ops{display:flex;gap:6px;flex-wrap:wrap}
+.trash-item .btn{padding:5px 9px;font-size:.82rem}
+.trash-empty{color:var(--muted);font-size:.9rem;padding:16px 0;text-align:center}
+.stats-panel{display:none;margin-top:8px;flex-direction:column;gap:8px}
+.stats-panel.open{display:flex}
+.stats-row{display:flex;gap:6px;align-items:center}
+.stats-row select{flex:1;min-width:0;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);color:var(--text);font:inherit;font-size:.82rem}
+.stats-row .btn{padding:5px 9px;font-size:.82rem}
+.stats-range{color:var(--muted);font-size:.76rem}
+.stats-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.stats-metric{background:var(--surface-2);border-radius:8px;padding:7px 9px}
+.stats-metric .k{color:var(--muted);font-size:.72rem}
+.stats-metric .v{font-size:1.05rem;font-weight:600}
+.stats-tags{font-size:.78rem;color:var(--muted);line-height:1.6}
+.stats-tags .tag-line{display:flex;justify-content:space-between;gap:8px}
 
 /* ===== Responsive ===== */
 @media (max-width: 900px) {
@@ -346,6 +388,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
   <symbol id="i-loader" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9"/></symbol>
   <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5"/><path d="M7 10l5-5 5 5"/><path d="M5 20h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></symbol>
 </svg>
 <div class="app">
   <header class="topbar">
@@ -357,7 +401,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
       <button class="btn icon" id="moreBtn" aria-haspopup="true" aria-expanded="false" title="更多"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button>
       <div class="menu" id="moreMenu">
         <button id="settingsBtn"><svg class="i" aria-hidden="true"><use href="#i-settings"/></svg>設定</button>
+        <button id="importBtn"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg>匯入備份</button>
         <button id="exportBtn"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>匯出備份</button>
+        <button id="exportDayBtn"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>匯出當天 Markdown</button>
+        <button id="trashBtn"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg>回收桶</button>
+        <button id="conflictsBtn"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>同步衝突版本</button>
       </div>
     </div>
   </header>
@@ -384,6 +432,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
           </select>
         </div>
         <div id="tagFilters" style="margin-top:8px;"></div>
+        <button class="filter-toggle" id="statsToggle" type="button"><svg class="i" aria-hidden="true"><use href="#i-chev-r"/></svg> 回顧統計與 AI 報告</button>
+        <div class="stats-panel" id="statsPanel">
+          <div class="stats-row">
+            <select id="statsRange" title="統計範圍">
+              <option value="week">本週</option>
+              <option value="month">本月</option>
+            </select>
+            <button class="btn" id="reportBtn" type="button" title="用 AI 產生本週／月回顧報告"><svg class="i" aria-hidden="true"><use href="#i-sparkle"/></svg>AI 報告</button>
+          </div>
+          <div class="stats-range" id="statsRangeLabel"></div>
+          <div class="stats-grid" id="statsGrid"></div>
+          <div class="stats-tags" id="statsTags"></div>
+        </div>
       </div>
       <div class="cal">
         <div class="calendar-header">
@@ -409,6 +470,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
           <span class="spacer"></span>
           <button class="btn" id="gotoTodayBtn" style="display:none;" title="回到今天（Alt+T）">回到今天</button>
           <button class="btn" id="previewBtn" aria-pressed="false" title="切換 Markdown 預覽（Alt+P）"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg><span class="txt">預覽</span></button>
+          <button class="btn icon" id="deleteDayBtn" title="刪除這一天的記錄（可從回收桶還原）" aria-label="刪除這一天的記錄"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg></button>
         </div>
         <div class="tags-bar">
           <span class="lbl">標籤</span>
@@ -436,6 +498,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 <div id="settingsModal" class="modal-overlay">
   <div class="modal">
     <h2>設定</h2>
+    <h3 style="margin-top:0">外觀</h3>
+    <label for="themeSelect">主題</label>
+    <select id="themeSelect">
+      <option value="system">跟隨系統</option>
+      <option value="light">淺色</option>
+      <option value="dark">深色</option>
+    </select>
+    <p class="hint">「跟隨系統」會隨裝置的深淺色設定自動切換。此偏好只存於本機，不會寫入備份檔，也不影響記錄內容。</p>
+    <hr>
     <h3>AI 整理（BYOK）</h3>
     <p class="hint">支援 OpenAI 相容 API（OpenAI、Groq、DeepSeek 等）。金鑰僅存在本機。</p>
     <label for="apiKey">API Key</label>
@@ -456,8 +527,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     <p class="hint">部署 Apps Script 後貼上「網頁應用程式」網址。設定後會自動雙向同步：開啟／切回頁面時拉取，編輯停止後約 2 秒自動上傳。手機與電腦各設定一次即可。</p>
     <button id="openTutorialBtn" class="btn" type="button" style="margin-top:8px;">📘 Google 試算表設定教學</button>
     <hr>
-    <button id="clearLocalBtn" class="btn danger" style="width:100%;justify-content:center;">清除所有本地記錄</button>
-    <p class="hint">此操作無法復原，建議先匯出備份。不會影響 Google 試算表。</p>
+    <button id="clearLocalBtn" class="btn danger" style="width:100%;justify-content:center;">清除所有本地記錄（含回收桶與衝突版本）</button>
+    <p class="hint">清除後本機無法自行復原，請先「匯出備份」。若已啟用試算表同步，雲端記錄會在下次同步時回到本機；若要連雲端一起清除，請到試算表手動刪除。</p>
     <div class="modal-actions">
       <button id="closeSettingsBtn" class="btn">關閉</button>
       <button id="saveSettingsBtn" class="btn primary">儲存</button>
@@ -512,7 +583,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     <ul class="tut">
       <li><strong>修改程式碼後沒生效</strong>：每次改程式碼都要「部署 → 管理部署作業 → 編輯 → 版本：新版本 → 部署」，網址不變。</li>
       <li><strong>同步失敗</strong>：確認「誰可以存取」為「所有人」、網址結尾是 <code>/exec</code>（不是 <code>/dev</code>）。</li>
-      <li><strong>同步規則</strong>：每筆記錄都有「更新時間」，以較新的一方為準；刪除也會同步。若兩台裝置離線時都改了同一天，會把兩份內容合併並標示「同步衝突」，不會遺失。在試算表手動修改內容時會自動更新時間。更新應用程式後，請重新複製程式碼貼進 Apps Script 並<strong>重新部署（管理部署作業 → 編輯 → 新版本）</strong>。</li>
+      <li><strong>同步規則</strong>：每筆記錄都有「更新時間」，以較新的一方為準；刪除也會同步。若兩台裝置離線時都改了同一天，較新的版本會成為主文，較舊版本另存於「更多 → 同步衝突版本」（只存本機，不會寫入主文或試算表），可還原或刪除。在試算表手動修改內容時會自動更新時間。更新應用程式後，請重新複製程式碼貼進 Apps Script 並<strong>重新部署（管理部署作業 → 編輯 → 新版本）</strong>。</li>
       <li><strong>同一天只保留一列</strong>：以日期為鍵，重複同步會更新而非新增。</li>
       <li><strong>隱私</strong>：請務必設定同步密碼，否則知道網址的人都能讀寫您的試算表。網頁本身不含任何個人資料，資料只存在各裝置瀏覽器與您的試算表。</li>
     </ul>
@@ -657,6 +728,62 @@ function doPost(e) {
   </div>
 </div>
 
+<!-- 匯入備份 Modal -->
+<div id="importModal" class="modal-overlay">
+  <div class="modal">
+    <h2>匯入備份</h2>
+    <p class="hint">只會還原「記錄內容」與「回收桶」，不會變更本機設定（API Key、同步密碼與同步網址）。備份檔中的刪除狀態不會帶入，避免誤刪試算表資料。</p>
+    <div id="importSummary" style="margin-top:12px;font-size:.9rem;line-height:1.7;"></div>
+    <div class="modal-actions">
+      <button id="closeImportBtn" class="btn">取消</button>
+      <button id="importReplaceBtn" class="btn danger">覆蓋本機記錄</button>
+      <button id="importMergeBtn" class="btn primary">合併（較新者為準）</button>
+    </div>
+  </div>
+</div>
+
+<!-- 回收桶 Modal -->
+<div id="trashModal" class="modal-overlay">
+  <div class="modal">
+    <h2>回收桶</h2>
+    <p class="hint">單日刪除的內容會保留在這裡，可隨時還原。回收桶只存在本機，不會同步到 Google 試算表。</p>
+    <div id="trashList" class="trash-list"></div>
+    <div class="modal-actions">
+      <button id="emptyTrashBtn" class="btn danger" style="margin-right:auto;">清空回收桶</button>
+      <button id="closeTrashBtn" class="btn">關閉</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="importFileInput" accept=".json,application/json" style="display:none">
+
+<!-- AI 回顧報告 Modal -->
+<div id="reportModal" class="modal-overlay">
+  <div class="modal">
+    <h2>AI 回顧報告</h2>
+    <p class="hint" id="reportRange"></p>
+    <textarea id="reportResult" readonly></textarea>
+    <div class="modal-actions">
+      <button id="closeReportBtn" class="btn">關閉</button>
+      <button id="copyReportBtn" class="btn">複製</button>
+      <button id="appendReportBtn" class="btn primary">附加到今天</button>
+    </div>
+  </div>
+</div>
+
+<!-- 同步衝突版本 Modal -->
+<div id="conflictsModal" class="modal-overlay">
+  <div class="modal">
+    <h2>同步衝突版本</h2>
+    <p class="hint">兩台裝置同時修改同一天時，較新的版本會成為主文，較舊版本另存在這裡。這些版本只存本機，不會同步到試算表，也不會被寫入主文。</p>
+    <div id="conflictsList" class="trash-list"></div>
+    <div class="modal-actions">
+      <button id="clearConflictsBtn" class="btn danger" style="margin-right:auto;">全部清除</button>
+      <button id="closeConflictsBtn" class="btn">關閉</button>
+    </div>
+  </div>
+</div>
+
 <div id="toastContainer" aria-live="polite"></div>
 <div id="confirmOverlay"><div class="confirm-box" role="dialog" aria-modal="true"><p id="confirmMsg"></p><div class="confirm-actions"><button class="btn" id="confirmCancel">取消</button><button id="confirmOk" class="btn danger">確定</button></div></div></div>
 
@@ -689,7 +816,7 @@ function esc(s) {
 </script>
 <script>
 // ========== 資料層 ==========
-const STORAGE_KEY = 'dailyWorkLog_v1';
+const STORAGE_KEY = window.__DWL_STORAGE_KEY || 'dailyWorkLog_v1';
 
 function getLocalDateString(d = new Date()) {
   const y = d.getFullYear();
@@ -763,8 +890,8 @@ const DEFAULT_SYSTEM_PROMPT = '你是專業的工作日誌整理助手。請一�
 
 function loadData() {
   const defaultData = {
-    entries: {}, deleted: {},
-    settings: { apiKey: '', apiBase: 'https://api.openai.com/v1', model: 'gpt-4o-mini', sheetUrl: '', sheetToken: '', systemPrompt: DEFAULT_SYSTEM_PROMPT }
+    entries: {}, deleted: {}, trash: [], conflicts: [],
+    settings: { apiKey: '', apiBase: 'https://api.openai.com/v1', model: 'gpt-4o-mini', sheetUrl: '', sheetToken: '', systemPrompt: DEFAULT_SYSTEM_PROMPT, theme: 'system' }
   };
   if (!isStorageAvailable()) return defaultData;
   try {
@@ -776,7 +903,10 @@ function loadData() {
     if (!data.settings.sheetUrl) data.settings.sheetUrl = '';
     if (!data.settings.sheetToken) data.settings.sheetToken = '';
     if (!data.deleted) data.deleted = {};
+    if (!Array.isArray(data.trash)) data.trash = [];
+    if (!Array.isArray(data.conflicts)) data.conflicts = [];
     if (!data.settings.systemPrompt) data.settings.systemPrompt = DEFAULT_SYSTEM_PROMPT;
+    if (!['system', 'light', 'dark'].includes(data.settings.theme)) data.settings.theme = 'system';
     return data;
   } catch (e) {
     window._storageDisabled = true;
@@ -786,12 +916,16 @@ function loadData() {
 
 function saveData(data) {
   if (!isStorageAvailable() || window._storageDisabled) return;
+  let ok = false;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    ok = true;
   } catch (e) {
     window._storageDisabled = true;
     showStorageWarning();
   }
+  // 容量檢查放在寫入的 try 之外，避免檢查本身出錯被誤判成寫入失敗
+  if (ok) { try { checkStorageCapacity(); } catch (e) {} }
 }
 
 let appData = loadData();
@@ -958,13 +1092,48 @@ function updateSaveStatus(saved) {
   saveStatus.style.color = saved ? 'var(--success)' : 'var(--muted)';
 }
 
+function setStorageBanner(kind, text) {
+  let warn = $('storageWarning');
+  if (!warn) {
+    warn = document.createElement('div');
+    warn.id = 'storageWarning';
+    warn.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><span></span>';
+    $('warnSlot').appendChild(warn);
+  }
+  warn.dataset.kind = kind;
+  warn.lastChild.textContent = text;
+}
+
 function showStorageWarning() {
-  if ($('storageWarning')) return;
-  const warn = document.createElement('div');
-  warn.id = 'storageWarning';
-  warn.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><span></span>';
-  warn.lastChild.textContent = '目前環境無法使用本機儲存（沙盒限制）。資料僅暫存在記憶體中，關閉頁面即消失。請使用「匯出備份」定期儲存，或將此檔案下載後用瀏覽器直接開啟。';
-  $('warnSlot').appendChild(warn);
+  setStorageBanner('disabled', '目前環境無法使用本機儲存（沙盒限制或配額已滿）。資料僅暫存在記憶體中，關閉頁面即消失。請使用「匯出備份」定期儲存，或將此檔案下載後用瀏覽器直接開啟。');
+}
+
+// 純函式：估算 localStorage 已用位元組數（UTF-16 約 2 bytes/字）
+// 瀏覽器常見上限約 5MB；達 80% 就先預警，不要等寫入失敗才發現
+const STORAGE_CAPACITY_BYTES = 5 * 1024 * 1024;
+const STORAGE_WARN_RATIO = 0.8;
+function estimateStorageBytes() {
+  try {
+    let total = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k === null) continue;
+      total += (k.length + (localStorage.getItem(k) || '').length) * 2;
+    }
+    return total;
+  } catch (e) { return null; }
+}
+function checkStorageCapacity() {
+  if (window._storageDisabled) return;
+  const used = estimateStorageBytes();
+  if (used === null) return;
+  const banner = $('storageWarning');
+  if (used >= STORAGE_CAPACITY_BYTES * STORAGE_WARN_RATIO) {
+    const pct = Math.round(used / STORAGE_CAPACITY_BYTES * 100);
+    setStorageBanner('capacity', `本機儲存已使用約 ${pct}%（${(used / 1024 / 1024).toFixed(2)} MB / 5 MB），接近瀏覽器上限。建議到「更多 → 匯出備份」保存資料，並清理舊記錄、回收桶或衝突版本，以免後續寫入失敗。`);
+  } else if (banner && banner.dataset.kind === 'capacity') {
+    banner.remove();
+  }
 }
 
 // ========== 檢視切換（手機） ==========
@@ -1031,6 +1200,7 @@ function renderEntryList() {
   const dateFrom = $('dateFrom').value;
   const dateTo = $('dateTo').value;
   const sortBy = $('sortSelect').value;
+  if ($('statsPanel') && $('statsPanel').classList.contains('open')) renderStats();
 
   let dates = Object.keys(appData.entries).filter(date => {
     if (dateFrom && date < dateFrom) return false;
@@ -1075,14 +1245,39 @@ function renderEntryList() {
   });
 }
 
-// ========== AI 功能 ==========
-async function aiSummarize() {
+// ========== 共用 LLM 管線（BYOK，單日整理與週報共用）==========
+const DEFAULT_REPORT_PROMPT = '你是專業的工作日誌回顧助手。請一律使用繁體中文，根據提供的一段期間每日工作記錄，產出結構化的回顧報告：① 本期重點與成果 ② 完成事項 ③ 待辦與需跟進 ④ 值得留意的問題。只根據記錄內容整理，不要捏造資訊，也不要添加額外評論。';
+
+async function callLLM(systemPrompt, userPrompt) {
   const settings = appData.settings;
   if (!settings.apiKey) {
     showToast('請先到「設定」填入您的 API Key。');
     openSettings();
-    return;
+    return null;
   }
+  const base = (settings.apiBase || 'https://api.openai.com/v1').replace(/\/$/, '');
+  const res = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.apiKey}` },
+    body: JSON.stringify({
+      model: settings.model || 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 1600
+    })
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || '無法取得結果';
+}
+
+async function aiSummarize() {
   const text = contentEl.value.trim();
   if (!text) { showToast('這一天還沒有內容可以整理。'); return; }
   const btn = $('aiBtn');
@@ -1090,40 +1285,131 @@ async function aiSummarize() {
   btn.disabled = true;
   btn.innerHTML = '<svg class="i spin" aria-hidden="true"><use href="#i-loader"/></svg><span class="txt">整理中...</span>';
   try {
-    const systemPrompt = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
-    const prompt = `記錄內容：\n${text}`;
-    const res = await fetch(`${settings.apiBase.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.apiKey}` },
-      body: JSON.stringify({
-        model: settings.model || 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.3,
-        max_tokens: 1000
-      })
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
-    }
-    const data = await res.json();
-    $('aiResult').value = data.choices?.[0]?.message?.content || '無法取得結果';
+    const result = await callLLM(appData.settings.systemPrompt || DEFAULT_SYSTEM_PROMPT, `記錄內容：\n${text}`);
+    if (result === null) return;
+    $('aiResult').value = result;
     $('aiModal').classList.add('active');
   } catch (e) {
-    showToast('AI 請求失敗：' + e.message + '\n請檢查 API Key、Base URL 與模型名稱是否正確。');
+    showToast('AI 請求失敗：' + e.message + '\n請檢查 API Key、Base URL 與模型名稱是否正確。', 'error');
   } finally {
     btn.disabled = false;
     btn.innerHTML = orig;
   }
 }
 
+// ========== 回顧統計（純函式，可獨立驗證）==========
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+// 本週以週一為起點；本月為當月 1 日到月末。兩者都只用本地日期，不涉即時區。
+function getRangeBounds(range, todayStr) {
+  const d = new Date(todayStr + 'T00:00:00');
+  if (range === 'month') {
+    return {
+      start: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`,
+      end: getLocalDateString(new Date(d.getFullYear(), d.getMonth() + 1, 0))
+    };
+  }
+  const back = (d.getDay() + 6) % 7;
+  const s = new Date(d); s.setDate(s.getDate() - back);
+  const e = new Date(s); e.setDate(s.getDate() + 6);
+  return { start: getLocalDateString(s), end: getLocalDateString(e) };
+}
+
+// 規則：字數不計空白；標籤分布取範圍內出現天數前 5 名；連續記錄天數由今天（今天無記錄則由昨天）往前算，範圍不限本週／本月。
+function computeStats(entries, range, todayStr) {
+  const { start, end } = getRangeBounds(range, todayStr);
+  const src = entries || {};
+  const isDate = d => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  const hasContent = d => isDate(d) && (src[d].content || '').trim();
+  const dates = Object.keys(src).filter(d => isDate(d) && d >= start && d <= end && hasContent(d)).sort();
+  const totalChars = dates.reduce((n, d) => n + (src[d].content || '').replace(/\s/g, '').length, 0);
+  const tagCounts = {};
+  dates.forEach(d => (src[d].tags || []).forEach(t => { tagCounts[t] = (tagCounts[t] || 0) + 1; }));
+  const tags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5);
+  const allWithContent = new Set(Object.keys(src).filter(hasContent));
+  const cursor = new Date(todayStr + 'T00:00:00');
+  if (!allWithContent.has(todayStr)) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (allWithContent.has(getLocalDateString(cursor))) { streak++; cursor.setDate(cursor.getDate() - 1); }
+  return {
+    start, end, dates, days: dates.length, totalChars,
+    avgChars: dates.length ? Math.round(totalChars / dates.length) : 0,
+    tags, streak
+  };
+}
+
+function renderStats() {
+  const range = $('statsRange').value;
+  const s = computeStats(appData.entries, range, getLocalDateString());
+  $('statsRangeLabel').textContent = `${s.start} ～ ${s.end}`;
+  $('statsGrid').innerHTML = [
+    ['記錄天數', s.days + ' 天'],
+    ['連續記錄', s.streak + ' 天'],
+    ['總字數', s.totalChars.toLocaleString('zh-TW') + ' 字'],
+    ['平均字數', s.avgChars.toLocaleString('zh-TW') + ' 字']
+  ].map(([k, v]) => `<div class="stats-metric"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join('');
+  $('statsTags').innerHTML = s.tags.length
+    ? `<div style="margin-bottom:2px;">標籤分布（前 ${s.tags.length} 名）</div>` + s.tags.map(([t, n]) => `<div class="tag-line"><span>${esc(t)}</span><span>${n} 天</span></div>`).join('')
+    : '<div>範圍內沒有標籤。</div>';
+}
+
+async function generateReport() {
+  const range = $('statsRange').value;
+  const s = computeStats(appData.entries, range, getLocalDateString());
+  if (!s.days) { showToast('這個範圍還沒有任何記錄，無法產生報告。'); return; }
+  const label = range === 'month' ? '本月' : '本週';
+  const body = s.dates.map(d => `### ${d}\n${appData.entries[d].content.trim()}`).join('\n\n');
+  const prompt = `統計範圍：${s.start} ～ ${s.end}（${label}）\n記錄天數：${s.days} 天\n\n以下是每日工作紀錄：\n\n${body}`;
+  const btn = $('reportBtn');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<svg class="i spin" aria-hidden="true"><use href="#i-loader"/></svg>產生中...';
+  try {
+    const result = await callLLM(DEFAULT_REPORT_PROMPT, prompt);
+    if (result === null) return;
+    $('reportRange').textContent = `${label}回顧：${s.start} ～ ${s.end}，共 ${s.days} 天記錄。`;
+    $('reportResult').value = result;
+    $('reportModal').classList.add('active');
+  } catch (e) {
+    showToast('AI 報告失敗：' + e.message + '\n請檢查 API Key、Base URL 與模型名稱是否正確。', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+$('statsToggle').onclick = () => {
+  const open = $('statsPanel').classList.toggle('open');
+  $('statsToggle').classList.toggle('open', open);
+  if (open) renderStats();
+};
+$('statsRange').addEventListener('change', renderStats);
+$('reportBtn').onclick = generateReport;
+$('closeReportBtn').onclick = () => $('reportModal').classList.remove('active');
+$('copyReportBtn').onclick = async () => {
+  const text = $('reportResult').value;
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); ta.remove();
+  }
+  showToast('報告已複製。');
+};
+$('appendReportBtn').onclick = () => {
+  loadEditor(getLocalDateString(), { focus: false });
+  switchMode('editor');
+  const current = contentEl.value.trim();
+  const report = $('reportResult').value;
+  contentEl.value = current ? current + '\n\n--- AI 回顧報告 ---\n' + report : report;
+  updateCharCount(); autoSave(); if (previewMode) renderPreview();
+  $('reportModal').classList.remove('active');
+  showToast('報告已附加到今天的記錄。', 'success');
+};
+
 // ========== 同步 ==========
 // 規則：每筆記錄有 updatedAt（最後編輯時間）與 base（上次成功同步時的 updatedAt）。
 //  - updatedAt > base ＝ 有尚未上傳的修改
-//  - 兩邊自上次同步後都被修改 ＝ 衝突，保留兩份內容（不會遺失）
+//  - 兩邊自上次同步後都被修改 ＝ 衝突，較新者當主文，較舊版本另存為獨立衝突版本（不寫入主文）
 //  - 其餘情況以「較新者為準」
 const SYNC = { queue: Promise.resolve(), timer: null, lastFull: 0, running: 0 };
 function getSheetUrl() { return (appData.settings.sheetUrl || '').trim(); }
@@ -1235,15 +1521,19 @@ function reconcile(remote) {
     }
     const base = e ? (e.base || 0) : 0;
     if (e && base > 0 && e.updatedAt > base && r.updatedAt > base && !r.deleted) {
-      // 衝突：兩邊自上次同步後都改過 → 較新的當主文，較舊的附在後面，標籤取聯集
+      // 衝突：較新版本當主文，較舊版本另存為獨立衝突版本，不再插入內文標記
       const localNewer = e.updatedAt >= r.updatedAt;
       const a = localNewer ? e : r, b = localNewer ? r : e;
-      let content = (a.content || '').trim();
-      if ((b.content || '').trim() && (b.content || '').trim() !== content) {
-        content += (content ? '\n\n' : '') + '--- ⚠️ 同步衝突：另一個版本（請手動整理後刪除此段） ---\n' + b.content.trim();
-      }
+      appData.conflicts = Array.isArray(appData.conflicts) ? appData.conflicts : [];
+      appData.conflicts.unshift({
+        id: newTrashId(), date,
+        content: (b.content || '').trim(),
+        tags: (b.tags || []).slice(),
+        savedAt: Date.now(),
+        otherUpdatedAt: b.updatedAt || 0
+      });
       const tags = [...new Set([...(e.tags || []), ...(r.tags || [])])];
-      appData.entries[date] = { content, tags, updatedAt: Date.now(), base: 0 };
+      appData.entries[date] = { content: (a.content || '').trim(), tags, updatedAt: Date.now(), base: 0 };
       merged++; touch(date);
     } else if (l.updatedAt >= r.updatedAt) {       // 本機較新（或相同）：標記待上傳
       if (e) e.base = 0;
@@ -1282,9 +1572,9 @@ function syncNow(opts = {}) {
       refreshViews(touchedCurrent, editorBefore);
       setSyncStatus('已同步', 'ok');
       if (!opts.silent) {
-        showToast(`雙向同步完成！\n上傳 ${pushed} 筆，下載 ${pulled} 筆` + (merged ? `，${merged} 筆衝突已合併（內文含「同步衝突」標記）` : '') + (stale ? `，${stale} 筆遠端較新已略過` : '') + '。', 'success');
+        showToast(`雙向同步完成！\n上傳 ${pushed} 筆，下載 ${pulled} 筆` + (merged ? `，${merged} 筆衝突（較舊版本已存至「更多 → 同步衝突版本」）` : '') + (stale ? `，${stale} 筆遠端較新已略過` : '') + '。', 'success');
       } else if (pulled || merged) {
-        showToast(`已從試算表更新 ${pulled + merged} 筆記錄` + (merged ? `（含 ${merged} 筆衝突合併）` : ''), 'success');
+        showToast(`已從試算表更新 ${pulled + merged} 筆記錄` + (merged ? `（含 ${merged} 筆衝突，較舊版本已另存）` : ''), 'success');
       }
     } catch (e) {
       setSyncStatus('同步失敗（已本機儲存）', 'error');
@@ -1329,6 +1619,30 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('online', () => syncNow({ silent: true }));
 window.addEventListener('pagehide', () => { autoSyncToSheet({ keepalive: true }); });
 
+// ========== 外觀主題 ==========
+const THEME_VALUES = ['system', 'light', 'dark'];
+function getThemePref() {
+  const t = appData && appData.settings && appData.settings.theme;
+  return THEME_VALUES.includes(t) ? t : 'system';
+}
+function applyTheme() {
+  const pref = getThemePref();
+  const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+  const dark = pref === 'dark' || (pref === 'system' && mq && mq.matches);
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', dark ? '#0f172a' : '#4f46e5');
+  const sel = $('themeSelect');
+  if (sel) sel.value = pref;
+}
+// 跟隨系統時，裝置主題變更要即時反映
+if (window.matchMedia) {
+  const systemMq = window.matchMedia('(prefers-color-scheme: dark)');
+  const onSystemThemeChange = () => { if (getThemePref() === 'system') applyTheme(); };
+  if (systemMq.addEventListener) systemMq.addEventListener('change', onSystemThemeChange);
+  else if (systemMq.addListener) systemMq.addListener(onSystemThemeChange);
+}
+
 // ========== 設定 ==========
 function openSettings() {
   $('apiKey').value = appData.settings.apiKey || '';
@@ -1337,6 +1651,7 @@ function openSettings() {
   $('sheetUrl').value = appData.settings.sheetUrl || '';
   $('sheetToken').value = appData.settings.sheetToken || '';
   $('systemPrompt').value = appData.settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+  $('themeSelect').value = getThemePref();
   $('settingsModal').classList.add('active');
 }
 
@@ -1352,7 +1667,9 @@ function mdInline(t) {
   return t.replace(/\u0000(\d+)\u0000/g, (m, i) => '<code>' + esc(codes[i]) + '</code>');
 }
 
-function renderMarkdown(src) {
+function renderMarkdown(src, opts = {}) {
+  const offset = Number(opts.lineOffset) || 0;
+  const allowToggle = opts.allowToggle !== false;
   const lines = String(src).replace(/\r\n?/g, '\n').split('\n');
   const listRe = /^(\s*)([-*+]|\d+\.)\s+(.*)$/;
   const tableSep = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
@@ -1375,7 +1692,7 @@ function renderMarkdown(src) {
       flushPara();
       const buf = [];
       while (i < lines.length && /^\s*>/.test(lines[i])) buf.push(lines[i++].replace(/^\s*>\s?/, ''));
-      out += '<blockquote>' + renderMarkdown(buf.join('\n')) + '</blockquote>';
+      out += '<blockquote>' + renderMarkdown(buf.join('\n'), { allowToggle: false }) + '</blockquote>';
     } else if (line.includes('|') && i + 1 < lines.length && tableSep.test(lines[i + 1]) && lines[i + 1].includes('-')) { // 表格
       flushPara();
       const head = cells(line); i += 2;
@@ -1393,7 +1710,14 @@ function renderMarkdown(src) {
         const tag = /\d/.test(m[2]) ? 'ol' : 'ul';
         let body = m[3], cls = '';
         const t = body.match(/^\[( |x|X)\]\s+(.*)$/);
-        if (t) { const done = t[1] !== ' '; cls = ' class="task' + (done ? ' done' : '') + '"'; body = `<input type="checkbox" disabled${done ? ' checked' : ''}><span>${mdInline(t[2])}</span>`; }
+        if (t) {
+          const done = t[1] !== ' ';
+          cls = ' class="task' + (done ? ' done' : '') + '"';
+          const box = allowToggle
+            ? `<input type="checkbox" data-line="${offset + i}"${done ? ' checked' : ''}>`
+            : `<input type="checkbox" disabled${done ? ' checked' : ''}>`;
+          body = `${box}<span>${mdInline(t[2])}</span>`;
+        }
         else body = mdInline(body);
         if (!stack.length || indent > stack[stack.length - 1].indent) { stack.push({ indent, tag }); html += `<${tag}><li${cls}>`; }
         else {
@@ -1408,6 +1732,18 @@ function renderMarkdown(src) {
   }
   flushPara();
   return out;
+}
+
+// 純函式：只切換指定行的待辦方塊，其餘內容原樣保留
+function toggleTaskLine(src, lineIndex) {
+  const lines = String(src).replace(/\r\n?/g, '\n').split('\n');
+  if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= lines.length) return src;
+  const re = /^(\s*(?:[-*+]|\d+\.)\s+\[)([ xX])(\])/;
+  const m = lines[lineIndex].match(re);
+  if (!m) return src;
+  const next = m[2] === ' ' ? 'x' : ' ';
+  lines[lineIndex] = lines[lineIndex].replace(re, (all, a, b, c) => a + next + c);
+  return lines.join('\n');
 }
 
 let previewMode = false;
@@ -1430,7 +1766,21 @@ function setPreview(on) {
   if (!on && window.innerWidth > 900) contentEl.focus();
 }
 $('previewBtn').onclick = () => setPreview(!previewMode);
-$('preview').addEventListener('dblclick', () => { if (!window.getSelection().toString()) setPreview(false); });
+$('preview').addEventListener('dblclick', e => {
+  if (e.target.closest && e.target.closest('input[type="checkbox"]')) return;
+  if (!window.getSelection().toString()) setPreview(false);
+});
+$('preview').addEventListener('change', e => {
+  const cb = e.target;
+  if (!cb || cb.tagName !== 'INPUT' || cb.type !== 'checkbox' || cb.dataset.line === undefined) return;
+  const next = toggleTaskLine(contentEl.value, Number(cb.dataset.line));
+  if (next === contentEl.value) return;
+  contentEl.value = next;
+  clearTimeout(saveTimer); saveTimer = null;
+  updateCharCount();
+  doSave();
+  renderPreview();
+});
 
 // ========== 事件綁定 ==========
 contentEl.addEventListener('input', () => {
@@ -1497,12 +1847,20 @@ $('saveSettingsBtn').onclick = () => {
   appData.settings.sheetUrl = $('sheetUrl').value.trim();
   appData.settings.sheetToken = $('sheetToken').value.trim();
   appData.settings.systemPrompt = $('systemPrompt').value.trim() || DEFAULT_SYSTEM_PROMPT;
+  appData.settings.theme = THEME_VALUES.includes($('themeSelect').value) ? $('themeSelect').value : 'system';
   saveData(appData);
+  applyTheme();
   $('settingsModal').classList.remove('active');
   showToast('設定已儲存');
   if (appData.settings.sheetUrl) syncNow({ silent: true });
 };
 $('resetSystemPromptBtn').onclick = () => { $('systemPrompt').value = DEFAULT_SYSTEM_PROMPT; };
+// 主題為介面偏好，改變時立即套用並寫入本機（不進備份檔）
+$('themeSelect').onchange = () => {
+  appData.settings.theme = THEME_VALUES.includes($('themeSelect').value) ? $('themeSelect').value : 'system';
+  saveData(appData);
+  applyTheme();
+};
 // 教學
 $('openTutorialBtn').onclick = () => {
   $('gasCode').textContent = $('gasSource').textContent.trim();
@@ -1522,15 +1880,19 @@ $('copyGasBtn').onclick = async () => {
 $('closeSettingsBtn').onclick = () => $('settingsModal').classList.remove('active');
 
 $('clearLocalBtn').onclick = async () => {
-  if (!await showConfirm('確定要清除所有本地記錄嗎？\n此操作無法復原（Google 試算表的資料不會被刪除）。\n建議先按「匯出備份」。')) return;
-  if (!await showConfirm('再次確認：真的要刪除所有本地記錄？')) return;
+  if (!await showConfirm('確定要清除所有本地記錄（含回收桶與衝突版本）嗎？\n清除後本機無法自行復原，建議先按「匯出備份」。\n若已啟用試算表同步，雲端記錄會在下次同步時回到本機；若要連雲端一起清除，請到試算表手動刪除。')) return;
+  if (!await showConfirm('再次確認：真的要刪除所有本地記錄、刪除狀態、回收桶與衝突版本？')) return;
   clearTimeout(saveTimer); saveTimer = null;
+  clearTimeout(SYNC.timer); SYNC.timer = null;
   appData.entries = {};
+  appData.deleted = {};
+  appData.trash = [];
+  appData.conflicts = [];
   saveData(appData);
   loadEditor(getLocalDateString(), { focus: false });
   renderTagFilters();
   $('settingsModal').classList.remove('active');
-  showToast('已清除所有本地記錄。');
+  showToast('已清除所有本地記錄、刪除狀態、回收桶與衝突版本。');
 };
 
 $('applyReplaceBtn').onclick = () => {
@@ -1547,14 +1909,363 @@ $('applyAppendBtn').onclick = () => {
 };
 $('closeAiBtn').onclick = () => $('aiModal').classList.remove('active');
 
-$('exportBtn').onclick = () => {
+// ========== 備份匯出／匯入、回收桶、單日刪除 ==========
+// 備份只含使用者內容：不含 API Key、同步密碼、同步網址，也不含同步中繼狀態（base／deleted）。
+function cleanEntryForBackup(e) {
+  return {
+    content: String((e && e.content) || ''),
+    tags: Array.isArray(e && e.tags) ? e.tags.map(t => String(t).trim()).filter(Boolean) : [],
+    updatedAt: Number(e && e.updatedAt) || 0
+  };
+}
+function buildBackup() {
+  const entries = {};
+  Object.keys(appData.entries || {}).forEach(date => { entries[date] = cleanEntryForBackup(appData.entries[date]); });
+  const s = appData.settings || {};
+  return {
+    _format: 'dailyWorkLogBackup',
+    _version: 2,
+    _exportedAt: new Date().toISOString(),
+    _note: '備份不含 API Key、同步密碼與同步網址；匯入時不會變更本機設定，也不會帶入刪除狀態。',
+    entries,
+    trash: Array.isArray(appData.trash) ? appData.trash.slice() : [],
+    conflicts: Array.isArray(appData.conflicts) ? appData.conflicts.slice() : [],
+    settings: { apiBase: s.apiBase || '', model: s.model || '', systemPrompt: s.systemPrompt || '' }
+  };
+}
+function downloadBackup() {
   flushSave();
-  const blob = new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify(buildBackup(), null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = url;
   a.download = `每日工作紀錄備份_${getLocalDateString()}.json`;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast('備份已匯出（不含 API Key、同步密碼與同步網址）。', 'success');
+}
+$('exportBtn').onclick = downloadBackup;
+$('importBtn').onclick = () => $('importFileInput').click();
+
+// 單日匯出：把目前編輯日期的內容存成 .md，不影響同步與備份
+function downloadCurrentDayMarkdown() {
+  flushSave();
+  const entry = getEntry(currentDate);
+  const text = (entry.content || '').trim();
+  if (!text) { showToast('這一天還沒有內容可以匯出。'); return; }
+  const lines = [`# ${currentDate}`, ''];
+  const tags = (entry.tags || []).filter(Boolean);
+  if (tags.length) lines.push('標籤：' + tags.map(t => '#' + String(t).trim()).join(' '), '');
+  lines.push(text, '');
+  const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `每日工作紀錄_${currentDate}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast(`已匯出 ${formatDisplayDate(currentDate)} 的 Markdown。`, 'success');
+}
+$('exportDayBtn').onclick = downloadCurrentDayMarkdown;
+
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ''));
+    r.onerror = () => reject(new Error('無法讀取檔案。'));
+    r.readAsText(file, 'utf-8');
+  });
+}
+function parseBackup(text) {
+  let obj;
+  try { obj = JSON.parse(text); }
+  catch (e) { throw new Error('檔案不是有效的 JSON。'); }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('備份檔格式不正確。');
+  if (!obj.entries || typeof obj.entries !== 'object' || Array.isArray(obj.entries)) throw new Error('備份檔缺少記錄資料（entries）。');
+  const entries = {};
+  Object.keys(obj.entries).forEach(k => {
+    const date = normalizeDateKey(k);
+    if (!DATE_KEY_RE.test(date)) return;
+    const item = cleanEntryForBackup(obj.entries[k]);
+    item.base = 0;
+    entries[date] = item;
+  });
+  const trash = [];
+  if (Array.isArray(obj.trash)) {
+    obj.trash.forEach(t => {
+      if (!t || typeof t !== 'object') return;
+      const date = normalizeDateKey(t.date);
+      if (!DATE_KEY_RE.test(date)) return;
+      trash.push({
+        id: String(t.id || (Date.now() + '-' + Math.random().toString(36).slice(2, 8))),
+        date,
+        content: String(t.content || ''),
+        tags: Array.isArray(t.tags) ? t.tags.map(x => String(x).trim()).filter(Boolean) : [],
+        deletedAt: Number(t.deletedAt) || Date.now()
+      });
+    });
+  }
+  const conflicts = [];
+  if (Array.isArray(obj.conflicts)) {
+    obj.conflicts.forEach(c => {
+      if (!c || typeof c !== 'object') return;
+      const date = normalizeDateKey(c.date);
+      if (!DATE_KEY_RE.test(date)) return;
+      conflicts.push({
+        id: String(c.id || (Date.now() + '-' + Math.random().toString(36).slice(2, 8))),
+        date,
+        content: String(c.content || ''),
+        tags: Array.isArray(c.tags) ? c.tags.map(x => String(x).trim()).filter(Boolean) : [],
+        savedAt: Number(c.savedAt) || Date.now(),
+        otherUpdatedAt: Number(c.otherUpdatedAt) || 0
+      });
+    });
+  }
+  return { entries, trash, conflicts };
+}
+
+let pendingBackup = null;
+function openImportSummary(b) {
+  const dates = Object.keys(b.entries);
+  const overlap = dates.filter(d => appData.entries[d]).length;
+  const newer = dates.filter(d => {
+    const cur = appData.entries[d];
+    return cur && (b.entries[d].updatedAt || 0) > (cur.updatedAt || 0);
+  }).length;
+  $('importSummary').innerHTML =
+    `<div>備份檔包含 <strong>${dates.length}</strong> 筆記錄、<strong>${b.trash.length}</strong> 筆回收桶項目、<strong>${(b.conflicts || []).length}</strong> 筆衝突版本。</div>` +
+    `<div>與本機重疊 <strong>${overlap}</strong> 筆，其中備份較新 <strong>${newer}</strong> 筆。</div>` +
+    `<p class="hint" style="margin-top:8px;">「合併」保留本機較新的內容；「覆蓋」以備份取代全部本機記錄。兩者都不會變更本機設定，也不會帶入備份中的刪除狀態。</p>`;
+  $('importModal').classList.add('active');
+}
+function applyBackup(b, mode) {
+  flushSave();
+  clearTimeout(SYNC.timer); SYNC.timer = null;
+  appData.conflicts = Array.isArray(appData.conflicts) ? appData.conflicts : [];
+  let added = 0, updated = 0, kept = 0;
+  if (mode === 'replace') {
+    appData.entries = {};
+    Object.keys(b.entries).forEach(date => { appData.entries[date] = { ...b.entries[date] }; added++; });
+    appData.deleted = {};
+    appData.trash = b.trash.slice();
+    appData.conflicts = (b.conflicts || []).slice();
+  } else {
+    Object.keys(b.entries).forEach(date => {
+      const incoming = b.entries[date];
+      const cur = appData.entries[date];
+      if (!cur) { appData.entries[date] = { ...incoming }; added++; }
+      else if ((incoming.updatedAt || 0) > (cur.updatedAt || 0)) { appData.entries[date] = { ...incoming }; updated++; }
+      else kept++;
+      if (appData.deleted) delete appData.deleted[date];
+    });
+    const ids = new Set((appData.trash || []).map(t => t.id));
+    b.trash.forEach(t => { if (!ids.has(t.id)) { appData.trash.push(t); ids.add(t.id); } });
+    appData.trash.sort((a, c) => (c.deletedAt || 0) - (a.deletedAt || 0));
+    const cIds = new Set(appData.conflicts.map(c => c.id));
+    (b.conflicts || []).forEach(c => { if (!cIds.has(c.id)) { appData.conflicts.push(c); cIds.add(c.id); } });
+    appData.conflicts.sort((a, c) => (c.savedAt || 0) - (a.savedAt || 0));
+  }
+  saveData(appData);
+  loadEditor(currentDate, { focus: false });
+  renderTagFilters();
+  if (getSheetUrl()) syncNow({ silent: true });
+  $('importModal').classList.remove('active');
+  pendingBackup = null;
+  showToast(mode === 'replace'
+    ? `已用備份覆蓋本機記錄，共 ${added} 筆。`
+    : `備份合併完成：新增 ${added} 筆、更新 ${updated} 筆、保留本機較新 ${kept} 筆。`, 'success');
+}
+$('importFileInput').addEventListener('change', async e => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    pendingBackup = parseBackup(await readFileText(file));
+    openImportSummary(pendingBackup);
+  } catch (err) {
+    pendingBackup = null;
+    showToast('匯入失敗：' + err.message, 'error');
+  }
+});
+$('closeImportBtn').onclick = () => { pendingBackup = null; $('importModal').classList.remove('active'); };
+$('importMergeBtn').onclick = () => { if (pendingBackup) applyBackup(pendingBackup, 'merge'); };
+$('importReplaceBtn').onclick = async () => {
+  if (!pendingBackup) return;
+  if (!await showConfirm('「覆蓋」會以備份檔取代全部本機記錄（含回收桶與衝突版本），本機較新的內容也會被取代。\n確定要繼續嗎？')) return;
+  applyBackup(pendingBackup, 'replace');
+};
+
+// ---- 回收桶（只存本機，不參與同步）----
+function newTrashId() { return Date.now() + '-' + Math.random().toString(36).slice(2, 8); }
+function renderTrash() {
+  const list = $('trashList');
+  list.innerHTML = '';
+  const items = (appData.trash || []).slice().sort((a, b) => (b.deletedAt || 0) - (a.deletedAt || 0));
+  if (!items.length) {
+    list.innerHTML = '<div class="trash-empty">回收桶是空的。</div>';
+    return;
+  }
+  items.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'trash-item';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const d = document.createElement('div');
+    d.className = 'date';
+    d.textContent = formatDisplayDate(item.date);
+    const p = document.createElement('div');
+    p.className = 'preview';
+    p.textContent = (item.content || '（無內容）').slice(0, 120);
+    meta.appendChild(d); meta.appendChild(p);
+    const ops = document.createElement('div');
+    ops.className = 'ops';
+    const restore = document.createElement('button');
+    restore.className = 'btn';
+    restore.textContent = '還原';
+    restore.onclick = () => restoreFromTrash(item.id);
+    const drop = document.createElement('button');
+    drop.className = 'btn danger';
+    drop.textContent = '永久刪除';
+    drop.onclick = async () => {
+      if (!await showConfirm('永久刪除此回收桶項目？\n此操作無法復原。')) return;
+      appData.trash = (appData.trash || []).filter(t => t.id !== item.id);
+      saveData(appData);
+      renderTrash();
+    };
+    ops.appendChild(restore); ops.appendChild(drop);
+    row.appendChild(meta); row.appendChild(ops);
+    list.appendChild(row);
+  });
+}
+$('trashBtn').onclick = () => { renderTrash(); $('trashModal').classList.add('active'); };
+$('closeTrashBtn').onclick = () => $('trashModal').classList.remove('active');
+$('emptyTrashBtn').onclick = async () => {
+  if (!(appData.trash || []).length) { showToast('回收桶已經是空的。'); return; }
+  if (!await showConfirm('確定要清空回收桶嗎？\n裡面的內容將無法再還原。')) return;
+  appData.trash = [];
+  saveData(appData);
+  renderTrash();
+  showToast('回收桶已清空。');
+};
+
+// ---- 單日刪除 ----
+function deleteCurrentDay() {
+  flushSave();
+  const entry = getEntry(currentDate);
+  const content = (entry.content || '').trim();
+  const tags = (entry.tags || []).slice();
+  if (!content && tags.length === 0) { showToast('這一天還沒有內容可以刪除。'); return; }
+  appData.trash = Array.isArray(appData.trash) ? appData.trash : [];
+  appData.trash.unshift({ id: newTrashId(), date: currentDate, content: entry.content || '', tags, deletedAt: Date.now() });
+  clearTimeout(saveTimer); saveTimer = null;
+  contentEl.value = '';
+  setEntry(currentDate, { content: '', tags: [] });
+  updateCharCount();
+  refreshAfterTagChange();
+  if (previewMode) renderPreview();
+  updateSaveStatus(true);
+  showToast('已刪除這一天的記錄，可從「更多 → 回收桶」還原。', 'success');
+}
+$('deleteDayBtn').onclick = async () => {
+  if (!await showConfirm(`確定要刪除 ${formatDisplayDate(currentDate)} 的記錄嗎？\n內容會保留在回收桶，可隨時還原；若已啟用同步，刪除也會同步到試算表。`)) return;
+  deleteCurrentDay();
+};
+function restoreFromTrash(id) {
+  const item = (appData.trash || []).find(t => t.id === id);
+  if (!item) return;
+  flushSave();
+  const cur = getEntry(item.date);
+  if ((cur.content || '').trim() || (cur.tags || []).length) {
+    appData.trash.unshift({
+      id: newTrashId(), date: item.date, content: cur.content || '',
+      tags: (cur.tags || []).slice(), deletedAt: Date.now()
+    });
+  }
+  appData.trash = appData.trash.filter(t => t.id !== id);
+  clearTimeout(saveTimer); saveTimer = null;
+  setEntry(item.date, { content: item.content || '', tags: (item.tags || []).slice() });
+  saveData(appData);
+  loadEditor(item.date, { focus: false });
+  renderTrash();
+  showToast(`已還原 ${formatDisplayDate(item.date)} 的記錄。`, 'success');
+}
+
+// ---- 同步衝突版本（只存本機，不參與同步上傳）----
+function renderConflicts() {
+  const list = $('conflictsList');
+  list.innerHTML = '';
+  const items = (appData.conflicts || []).slice().sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  if (!items.length) {
+    list.innerHTML = '<div class="trash-empty">目前沒有衝突版本。</div>';
+    return;
+  }
+  items.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'trash-item';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const d = document.createElement('div');
+    d.className = 'date';
+    d.textContent = formatDisplayDate(item.date) + '（較舊版本）';
+    const p = document.createElement('div');
+    p.className = 'preview';
+    p.textContent = (item.content || '（無內容）').slice(0, 120);
+    meta.appendChild(d); meta.appendChild(p);
+    const ops = document.createElement('div');
+    ops.className = 'ops';
+    const restore = document.createElement('button');
+    restore.className = 'btn';
+    restore.textContent = '還原成主文';
+    restore.onclick = () => restoreConflict(item.id);
+    const drop = document.createElement('button');
+    drop.className = 'btn danger';
+    drop.textContent = '刪除';
+    drop.onclick = async () => {
+      if (!await showConfirm('刪除此衝突版本？\n此操作無法復原。')) return;
+      appData.conflicts = (appData.conflicts || []).filter(c => c.id !== item.id);
+      saveData(appData);
+      renderConflicts();
+    };
+    ops.appendChild(restore); ops.appendChild(drop);
+    row.appendChild(meta); row.appendChild(ops);
+    list.appendChild(row);
+  });
+}
+function restoreConflict(id) {
+  appData.conflicts = Array.isArray(appData.conflicts) ? appData.conflicts : [];
+  const item = appData.conflicts.find(c => c.id === id);
+  if (!item) return;
+  flushSave();
+  // 目前主文也存成衝突版本，避免覆蓋掉任何一份內容
+  const cur = getEntry(item.date);
+  if ((cur.content || '').trim() || (cur.tags || []).length) {
+    appData.conflicts.unshift({
+      id: newTrashId(), date: item.date, content: cur.content || '',
+      tags: (cur.tags || []).slice(), savedAt: Date.now(), otherUpdatedAt: cur.updatedAt || 0
+    });
+  }
+  appData.conflicts = appData.conflicts.filter(c => c.id !== id);
+  clearTimeout(saveTimer); saveTimer = null;
+  setEntry(item.date, { content: item.content || '', tags: (item.tags || []).slice() });
+  saveData(appData);
+  loadEditor(item.date, { focus: false });
+  renderConflicts();
+  showToast(`已把 ${formatDisplayDate(item.date)} 的較舊版本還原成主文；原主文已另存為衝突版本。`, 'success');
+}
+$('conflictsBtn').onclick = () => { renderConflicts(); $('conflictsModal').classList.add('active'); };
+$('closeConflictsBtn').onclick = () => $('conflictsModal').classList.remove('active');
+$('clearConflictsBtn').onclick = async () => {
+  if (!(appData.conflicts || []).length) { showToast('目前沒有衝突版本。'); return; }
+  if (!await showConfirm('確定要清除全部衝突版本嗎？\n此操作無法復原。')) return;
+  appData.conflicts = [];
+  saveData(appData);
+  renderConflicts();
+  showToast('衝突版本已全部清除。');
 };
 
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
@@ -1580,7 +2291,9 @@ document.addEventListener('keydown', e => {
 // ========== 初始化 ==========
 appData = loadData();
 fixBadYearsInData();
+applyTheme();
 if (window._storageDisabled) showStorageWarning();
+else checkStorageCapacity();
 renderTagFilters();
 loadEditor(currentDate);
 if (getSheetUrl()) syncNow({ silent: true });
