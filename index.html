@@ -381,11 +381,20 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   #preview { font-size: 1rem; padding: 12px 14px; }
   .editor-head { padding: 8px 10px; }
   .tags-bar { padding: 6px 10px; }
-  .date-title { font-size: .95rem; white-space: nowrap; padding: 0 2px; }
+  .date-title { font-size: .95rem; white-space: nowrap; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; }
   .today-badge { display: none !important; }
   .editor-head { flex-wrap: nowrap; gap: 4px; }
   .date-nav { min-width: 0; gap: 2px; }
   #gotoTodayBtn { padding: 7px 8px; font-size: .82rem; }
+}
+
+/* 窄螢幕：日期列與操作按鈕分兩行，避免日期文字擠壓重疊 */
+@media (max-width: 560px) {
+  .editor-head { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .date-nav { flex: 1 1 100%; justify-content: space-between; }
+  .date-nav .btn.icon { padding: 7px 8px; }
+  .date-title { flex: 1 1 auto; text-align: center; font-size: .92rem; }
+  .editor-head > .spacer { display: none; }
 }
 </style>
 </head>
