@@ -38,6 +38,7 @@
 5. 資料僅存在本機 localStorage；可隨時匯出／匯入 JSON 備份（備份不含 API Key 與同步密碼）。
 6. 「回顧」側欄可展開本週／本月統計並用 AI 產生回顧報告；Markdown 預覽中的待辦方塊可直接勾選並回存。
 7. 「設定 → 外觀」可切換跟隨系統／淺色／深色；「更多」可匯出當天 Markdown、匯出／匯入 JSON 備份與查看回收桶、衝突版本。
+8. 「回顧」記錄清單預設只顯示前三天、今天、後三天共 7 天；按「顯示全部」或用搜尋／篩選可查看其餘日期。
 -->
 <style>
 html { touch-action: manipulation; }
@@ -172,6 +173,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .calendar-day.selected::after { background: #fff; }
 
 .list-head { flex: none; display: flex; justify-content: space-between; padding: 8px 12px 4px; font-size: .78rem; color: var(--muted); }
+.list-window-bar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 2px 12px 6px; font-size: .76rem; color: var(--muted); }
+.list-window-bar .filter-toggle { flex: none; margin: 0; white-space: nowrap; text-decoration: underline; text-underline-offset: 2px; }
 .entry-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
 .entry-item {
   padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border);
@@ -470,6 +473,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
         <div id="calendarGrid" class="calendar-grid" data-page-node-id="CpkrCmFA7440k4AQSef6DN"></div>
       </div>
       <div class="list-head" data-page-node-id="zuOxcExQMPlSysrFBxjHz2"><span id="listCount" data-page-node-id="L2i0rhxmXSmkoA9j1QYNIL"></span><button class="filter-toggle" id="clearFilters" type="button" style="display:none;margin:0" data-page-node-id="ahNGzOdGDnmbXB90HebTDL">清除篩選</button></div>
+      <div class="list-window-bar" id="listWindowBar">
+        <span id="listWindowInfo"></span>
+        <button class="filter-toggle" id="toggleWindowBtn" type="button" aria-expanded="false"></button>
+      </div>
       <div id="entryList" class="entry-list" data-page-node-id="YDgwHCQZMqrYHoJDDY4yKH"></div>
     </aside>
 
@@ -1216,6 +1223,18 @@ function hasActiveFilter() {
   return !!(searchInput.value.trim() || $('dateFrom').value || $('dateTo').value || selectedFilterTags.size);
 }
 
+// 回顧清單預設以今天為中心，只顯示前三天、今天、後三天（共 7 天）
+// 這是純 UI 狀態，不寫入本機儲存、不進備份；有明確篩選條件時視窗讓位
+const LIST_WINDOW_SPAN = 3;
+let listWindowAll = false;
+function getNearbyDateBounds(todayStr, span = LIST_WINDOW_SPAN) {
+  return { from: shiftDate(todayStr, -span), to: shiftDate(todayStr, span) };
+}
+function shortDateLabel(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  return m ? `${Number(m[2])}/${Number(m[3])}` : dateStr;
+}
+
 function renderEntryList() {
   const search = (searchInput.value || '').trim().toLowerCase();
   const dateFrom = $('dateFrom').value;
@@ -1223,7 +1242,13 @@ function renderEntryList() {
   const sortBy = $('sortSelect').value;
   if ($('statsPanel') && $('statsPanel').classList.contains('open')) renderStats();
 
+  const filterActive = hasActiveFilter();
+  // 搜尋、標籤、日期區間都是明確的「找資料」意圖，此時不套用 7 天視窗
+  const useWindow = !listWindowAll && !filterActive;
+  const bounds = getNearbyDateBounds(getLocalDateString());
+
   let dates = Object.keys(appData.entries).filter(date => {
+    if (useWindow && (date < bounds.from || date > bounds.to)) return false;
     if (dateFrom && date < dateFrom) return false;
     if (dateTo && date > dateTo) return false;
     const entry = appData.entries[date];
@@ -1243,12 +1268,24 @@ function renderEntryList() {
     }
   });
 
-  $('listCount').textContent = `共 ${dates.length} 筆記錄`;
-  $('clearFilters').style.display = hasActiveFilter() ? 'inline' : 'none';
+  $('listCount').textContent = useWindow ? `近 7 天 · 共 ${dates.length} 筆記錄` : `共 ${dates.length} 筆記錄`;
+  $('clearFilters').style.display = filterActive ? 'inline' : 'none';
+
+  const bar = $('listWindowBar'), info = $('listWindowInfo'), toggle = $('toggleWindowBtn');
+  bar.style.display = filterActive ? 'none' : 'flex';
+  if (!filterActive) {
+    info.textContent = useWindow
+      ? `僅顯示 ${shortDateLabel(bounds.from)} – ${shortDateLabel(bounds.to)}（今天 ±3 天）`
+      : '顯示全部日期的記錄';
+    toggle.textContent = useWindow ? '顯示全部' : '僅近 7 天';
+    toggle.setAttribute('aria-expanded', String(listWindowAll));
+  }
 
   entryList.innerHTML = '';
   if (dates.length === 0) {
-    entryList.innerHTML = '<div class="empty">沒有符合條件的記錄</div>';
+    entryList.innerHTML = useWindow
+      ? '<div class="empty">近 7 天沒有記錄。<br>可按上方「顯示全部」或用搜尋、日期篩選查看其他日期。</div>'
+      : '<div class="empty">沒有符合條件的記錄</div>';
     return;
   }
   dates.forEach(date => {
@@ -1859,6 +1896,7 @@ $('nextMonth').onclick = () => {
 };
 
 searchInput.addEventListener('input', renderEntryList);
+$('toggleWindowBtn').onclick = () => { listWindowAll = !listWindowAll; renderEntryList(); };
 $('dateFrom').addEventListener('change', renderEntryList);
 $('dateTo').addEventListener('change', renderEntryList);
 $('sortSelect').addEventListener('change', renderEntryList);
