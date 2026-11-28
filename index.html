@@ -39,6 +39,7 @@
 6. 「回顧」側欄可展開本週／本月統計並用 AI 產生回顧報告；Markdown 預覽中的待辦方塊可直接勾選並回存。
 7. 「設定 → 外觀」可切換跟隨系統／淺色／深色；「更多」可匯出當天 Markdown、匯出／匯入 JSON 備份與查看回收桶、衝突版本。
 8. 「回顧」記錄清單預設只顯示前三天、今天、後三天共 7 天；按「顯示全部」或用搜尋／篩選可查看其餘日期。
+9. 載入日期時，有文字內容者預設顯示 Markdown 預覽（唯讀），無內容者直接進編輯模式；可用「預覽／編輯」鈕或 Alt+P 隨時切換。
 -->
 <style>
 html { touch-action: manipulation; }
@@ -500,7 +501,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
           <input type="text" id="newTagInput" placeholder="＋ 新增標籤" maxlength="20" data-page-node-id="1wvECfS7fkN3noQuq97dfZ">
           <span id="allTagsList" style="display:contents" data-page-node-id="kkRUeTamhWsFZffslFrtnD"></span>
         </div>
-        <div id="preview" class="md" hidden tabindex="0" title="雙擊回到編輯" data-page-node-id="UKkWZWd7Wo7Pu8nlHnjTi3"></div>
+        <div id="preview" class="md" hidden tabindex="0" title="雙擊空白處回到編輯" data-page-node-id="UKkWZWd7Wo7Pu8nlHnjTi3"></div>
         <textarea id="content" placeholder="今天做了什麼？直接開始書寫，內容會自動儲存..."></textarea>
         <div class="editor-foot" data-page-node-id="0Xu6ivZb4of20yQEkupGez">
           <span class="save-status" id="saveStatus" data-page-node-id="hNxQN3R85RxBIKoHb33niV">已自動儲存</span>
@@ -1031,8 +1032,14 @@ function loadEditor(date, opts = {}) {
   renderEntryList();
   updateCharCount();
   updateSaveStatus(true);
-  if (previewMode) renderPreview();
-  else if (opts.focus !== false && window.innerWidth > 900) contentEl.focus();
+  // 載入日期時依「有無文字內容」決定預設檢視模式：有內容先給唯讀的 Markdown 預覽，
+  // 沒內容直接進編輯模式可立即輸入。同步後同一天重繪用 keepView 保留當下模式，避免打字中被切換。
+  if (opts.keepView) {
+    if (previewMode) renderPreview();
+    else if (opts.focus !== false && window.innerWidth > 900) contentEl.focus();
+  } else {
+    setPreview(Boolean((entry.content || '').trim()), { focus: opts.focus !== false });
+  }
 }
 
 function renderCurrentTags() {
@@ -1604,7 +1611,7 @@ function reconcile(remote) {
 }
 
 function refreshViews(touchedCurrent, editorBefore) {
-  if (touchedCurrent && contentEl.value === editorBefore) loadEditor(currentDate, { focus: false });
+  if (touchedCurrent && contentEl.value === editorBefore) loadEditor(currentDate, { focus: false, keepView: true });
   else { renderCalendar(); renderEntryList(); renderAllTags(); }
   renderTagFilters();
 }
@@ -1833,7 +1840,8 @@ function renderPreview() {
   const src = contentEl.value;
   el.innerHTML = src.trim() ? renderMarkdown(src) : '<p class="empty-md">（沒有內容）</p>';
 }
-function setPreview(on) {
+function setPreview(on, opts = {}) {
+  const allowFocus = opts.focus !== false;
   if (on) flushSave();
   previewMode = on;
   if (on) renderPreview();
@@ -1844,12 +1852,15 @@ function setPreview(on) {
   btn.classList.toggle('primary', on);
   btn.innerHTML = `<svg class="i" aria-hidden="true"><use href="#${on ? 'i-edit' : 'i-eye'}"/></svg><span class="txt">${on ? '編輯' : '預覽'}</span>`;
   btn.title = (on ? '回到編輯' : '切換 Markdown 預覽') + '（Alt+P）';
-  if (!on && window.innerWidth > 900) contentEl.focus();
+  if (!on && allowFocus && window.innerWidth > 900) contentEl.focus();
 }
 $('previewBtn').onclick = () => setPreview(!previewMode);
 $('preview').addEventListener('dblclick', e => {
   if (e.target.closest && e.target.closest('input[type="checkbox"]')) return;
-  if (!window.getSelection().toString()) setPreview(false);
+  // 雙擊文字時保留選取以便複製；雙擊容器空白處一律回到編輯，
+  // 不受先前殘留選取影響（預覽已成為有內容日期的預設檢視，回編輯的路徑必須可靠）
+  const selText = window.getSelection().toString();
+  if (e.target === e.currentTarget || !selText) setPreview(false);
 });
 $('preview').addEventListener('change', e => {
   const cb = e.target;
@@ -2249,7 +2260,8 @@ function deleteCurrentDay() {
   setEntry(currentDate, { content: '', tags: [] });
   updateCharCount();
   refreshAfterTagChange();
-  if (previewMode) renderPreview();
+  // 內容已清空，直接回到可輸入的編輯模式，不再停留在空白預覽
+  if (previewMode) setPreview(false);
   updateSaveStatus(true);
   showToast('已刪除這一天的記錄，可從「更多 → 回收桶」還原。', 'success');
 }
