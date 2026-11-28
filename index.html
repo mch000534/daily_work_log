@@ -390,6 +390,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V5"/><path d="M7 10l5-5 5 5"/><path d="M5 20h14"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></symbol>
 </svg>
 <div class="app">
   <header class="topbar">
@@ -525,7 +526,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     <label for="sheetToken">同步密碼（建議設定）</label>
     <input type="password" id="sheetToken" autocomplete="off" placeholder="與 Apps Script 內 TOKEN 相同">
     <p class="hint">部署 Apps Script 後貼上「網頁應用程式」網址。設定後會自動雙向同步：開啟／切回頁面時拉取，編輯停止後約 2 秒自動上傳。手機與電腦各設定一次即可。</p>
-    <button id="openTutorialBtn" class="btn" type="button" style="margin-top:8px;">📘 Google 試算表設定教學</button>
+    <button id="openTutorialBtn" class="btn" type="button" style="margin-top:8px;"><svg class="i" aria-hidden="true"><use href="#i-book"/></svg>Google 試算表設定教學</button>
     <hr>
     <button id="clearLocalBtn" class="btn danger" style="width:100%;justify-content:center;">清除所有本地記錄（含回收桶與衝突版本）</button>
     <p class="hint">清除後本機無法自行復原，請先「匯出備份」。若已啟用試算表同步，雲端記錄會在下次同步時回到本機；若要連雲端一起清除，請到試算表手動刪除。</p>
