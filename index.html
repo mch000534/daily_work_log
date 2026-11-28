@@ -295,6 +295,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   font: inherit; font-size: .95rem; background: var(--surface-2); color: var(--text);
 }
 .modal textarea { min-height: 220px; line-height: 1.6; }
+/* 敏感欄位：眼睛圖示覆蓋在輸入框右側，輸入文字預留空間避免被遮住 */
+.secret-field { position: relative; }
+.secret-field input { width: 100%; padding-right: 42px; }
+.secret-toggle {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  border: 0; border-radius: 8px; background: transparent;
+  color: var(--muted); cursor: pointer; font: inherit;
+}
+.secret-toggle:hover { background: var(--surface); color: var(--text); }
+.secret-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.secret-toggle .i { width: 18px; height: 18px; }
 .modal ol.tut, .modal ul.tut { margin: 6px 0 0; padding-left: 1.4em; font-size: .88rem; line-height: 1.7; }
 .modal .tut code { font-family: ui-monospace, Menlo, Consolas, monospace; background: var(--tag-bg); padding: .05em .35em; border-radius: 4px; }
 .modal .hint { color: var(--muted); font-size: .82rem; margin: 4px 0 0; }
@@ -386,6 +399,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   <symbol id="i-edit" viewBox="0 0 24 24" data-page-node-id="7a6EN0mfuVQcFaHzTJc3L9"><path d="M4 20h4L19 9l-4-4L4 16z" data-page-node-id="KqfCBGpN1x747SEbxkK60z"/><path d="M13.5 6.5l4 4" data-page-node-id="VRQp07DD3cc9TAXYC7KqpJ"/></symbol>
   <symbol id="i-calendar" viewBox="0 0 24 24" data-page-node-id="lZH1e30UVI0REPzBTrYFae"><rect x="4" y="5" width="16" height="15" rx="2" data-page-node-id="4v8meDfUp4Du9o6zBVYJxp"/><path d="M4 10h16M9 3v4M15 3v4" data-page-node-id="M484CrhGD36XyzG8YgXC2S"/></symbol>
   <symbol id="i-eye" viewBox="0 0 24 24" data-page-node-id="GjclvQjSoJ9HKnwANLMePh"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" data-page-node-id="SdcYLCPQQIOTgldJIEB1iX"/><circle cx="12" cy="12" r="3" data-page-node-id="N7EWDgMah2MLKAhTjH2LGN"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 6.2A10.9 10.9 0 0 1 12 6c6.4 0 10 6 10 6a17.7 17.7 0 0 1-2.3 3.1"/><path d="M6.3 6.4C3.7 8.2 2 12 2 12s3.6 6 10 6a10.8 10.8 0 0 0 3.8-.7"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
   <symbol id="i-loader" viewBox="0 0 24 24" data-page-node-id="j4tFmqujWjCWpHZczcqrrb"><path d="M12 3a9 9 0 1 0 9 9" data-page-node-id="NSISaf6ZL3ZFVQYmYO21eB"/></symbol>
   <symbol id="i-alert" viewBox="0 0 24 24" data-page-node-id="O89hCGsEhKlkfIk4tzjNwB"><path d="M12 3l10 18H2z" data-page-node-id="m7dmM7ZBrFdJpNa8Fcy1AZ"/><path d="M12 10v5M12 18v.5" data-page-node-id="ESypEPqkaGVV8izddhAeIc"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24" data-page-node-id="hVnSHg7qUQgt0NV17lAnaJ"><path d="M12 16V5" data-page-node-id="PWZEzRX3TpI0ol4JQ97hWB"/><path d="M7 10l5-5 5 5" data-page-node-id="oHCcUf4LzfrxLyfp2QViJv"/><path d="M5 20h14" data-page-node-id="DBuyj4uQaVH0ARC5R3pdYr"/></symbol>
@@ -511,7 +525,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     <h3 data-page-node-id="DybyYHdSgC2ppWcnPH2pPh">AI 整理（BYOK）</h3>
     <p class="hint" data-page-node-id="YBcrdAYWWLd2K4E2WKcAqk">支援 OpenAI 相容 API（OpenAI、Groq、DeepSeek 等）。金鑰僅存在本機。</p>
     <label for="apiKey" data-page-node-id="shppHa4bnVPjl6cdiIQYg9">API Key</label>
-    <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" data-page-node-id="ypkv1cNim0edJBoh6ljMM4">
+    <div class="secret-field">
+      <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" spellcheck="false" data-page-node-id="ypkv1cNim0edJBoh6ljMM4">
+      <button type="button" class="secret-toggle" id="toggleApiKey" title="顯示 API Key" aria-label="顯示 API Key" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg></button>
+    </div>
     <label for="apiBase" data-page-node-id="Bs2LfEmF6idmfYrcLWYEqr">API Base URL</label>
     <input type="text" id="apiBase" placeholder="https://api.openai.com/v1" data-page-node-id="CgBn9y5LoQnSHD9uEY1tno">
     <label for="model" data-page-node-id="vSgC9ZP2B5B9I3xRIyVZJZ">模型名稱</label>
@@ -524,7 +541,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     <label for="sheetUrl" data-page-node-id="HdcD2QcPW0Z1oORCbM9COa">Apps Script 網址</label>
     <input type="text" id="sheetUrl" placeholder="https://script.google.com/macros/s/.../exec" data-page-node-id="TpZ0wnobxYCGL25H5dQZ1Y">
     <label for="sheetToken" data-page-node-id="wf0HyLdXJ6ce5FXhvgUaDu">同步密碼（建議設定）</label>
-    <input type="password" id="sheetToken" autocomplete="off" placeholder="與 Apps Script 內 TOKEN 相同" data-page-node-id="VSqwhfrH5Jk6YL0qzLgWwP">
+    <div class="secret-field">
+      <input type="password" id="sheetToken" autocomplete="off" spellcheck="false" placeholder="與 Apps Script 內 TOKEN 相同" data-page-node-id="VSqwhfrH5Jk6YL0qzLgWwP">
+      <button type="button" class="secret-toggle" id="toggleSheetToken" title="顯示同步密碼" aria-label="顯示同步密碼" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-eye"/></svg></button>
+    </div>
     <p class="hint" data-page-node-id="mvwYHBgwrYYnOjyvzlYpP8">部署 Apps Script 後貼上「網頁應用程式」網址。設定後會自動雙向同步：開啟／切回頁面時拉取，編輯停止後約 2 秒自動上傳。手機與電腦各設定一次即可。</p>
     <button id="openTutorialBtn" class="btn" type="button" style="margin-top:8px;" data-page-node-id="7xoU0tjSYsBn2JUqLKo1ok"><svg class="i" aria-hidden="true" data-page-node-id="Uu46qohvabbdTU2ceXpOt3"><use href="#i-book" data-page-node-id="sJLyCM9xqPdn3KTPIv1dt2"/></svg>Google 試算表設定教學</button>
     <hr data-page-node-id="S4YTbO1gWRIprqF63Siznv">
@@ -1645,6 +1665,27 @@ if (window.matchMedia) {
 }
 
 // ========== 設定 ==========
+// 敏感欄位顯示／隱藏：只改變 input 類型與圖示，不寫入任何持久化狀態
+// 文案直接定義，避免靜態 HTML 與動態切換的中英空格不一致
+const SECRET_FIELDS = [
+  { input: 'apiKey', btn: 'toggleApiKey', showLabel: '顯示 API Key', hideLabel: '隱藏 API Key' },
+  { input: 'sheetToken', btn: 'toggleSheetToken', showLabel: '顯示同步密碼', hideLabel: '隱藏同步密碼' }
+];
+function setSecretVisible(field, visible) {
+  const input = $(field.input), btn = $(field.btn);
+  if (!input || !btn) return;
+  input.type = visible ? 'text' : 'password';
+  const labelText = visible ? field.hideLabel : field.showLabel;
+  btn.setAttribute('aria-pressed', String(visible));
+  btn.setAttribute('aria-label', labelText);
+  btn.title = labelText;
+  const use = btn.querySelector('use');
+  if (use) use.setAttribute('href', visible ? '#i-eye-off' : '#i-eye');
+}
+SECRET_FIELDS.forEach(field => {
+  $(field.btn).onclick = () => setSecretVisible(field, $(field.input).type === 'password');
+});
+
 function openSettings() {
   $('apiKey').value = appData.settings.apiKey || '';
   $('apiBase').value = appData.settings.apiBase || 'https://api.openai.com/v1';
@@ -1653,6 +1694,8 @@ function openSettings() {
   $('sheetToken').value = appData.settings.sheetToken || '';
   $('systemPrompt').value = appData.settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
   $('themeSelect').value = getThemePref();
+  // 每次開啟設定都回到隱藏，避免離開後金鑰仍顯示在螢幕上
+  SECRET_FIELDS.forEach(f => setSecretVisible(f, false));
   $('settingsModal').classList.add('active');
 }
 
